@@ -4,6 +4,12 @@ extends Control
 
 signal escaped
 
+var _ui_blocks_capture := false
+
+
+func set_ui_blocks_capture(blocks: bool):
+	_ui_blocks_capture = blocks
+
 
 func _ready():
 	if capture_mouse_in_ready:
@@ -23,7 +29,8 @@ func capture():
 func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		if event.pressed and Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-			capture()
+			if not _ui_blocks_capture:
+				capture()
 	
 	elif event is InputEventKey:
 		if event.pressed and event.keycode == KEY_ESCAPE:

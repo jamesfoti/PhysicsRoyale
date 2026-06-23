@@ -34,7 +34,7 @@ func _unhandled_input(event: InputEvent):
 					else:
 						vp.debug_draw = Viewport.DEBUG_DRAW_OVERDRAW
 
-				KEY_P:
+				KEY_F8:
 					_dump_octree()
 
 				KEY_U:

@@ -7,6 +7,7 @@
 shader = ExtResource("1_nw8rs")
 
 [node name="PauseMenu" type="Control"]
+process_mode = 3
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -48,7 +49,7 @@ offset_bottom = 216.0
 offset_right = 384.0
 offset_bottom = 48.0
 theme_override_font_sizes/font_size = 32
-text = "Pause"
+text = "Pause (Esc / P)"
 horizontal_alignment = 1
 
 [node name="Resume" type="Button" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]

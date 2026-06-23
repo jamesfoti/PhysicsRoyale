@@ -133,10 +133,14 @@ func _ready():
 	add_child(_ship)
 	camera.set_target(_ship)
 	_hud.show()
+
+	if _hud.has_node("DebugPanel"):
+		_hud.get_node("DebugPanel").set_settings(_settings)
 	
 	_on_game_loaded()
 	
 	set_physics_process(true)
+	_process_setting_changes()
 
 	progress_info.finished = true
 	loading_progressed.emit(progress_info)
@@ -159,17 +163,70 @@ func set_settings_ui(ui: Control):
 	_settings_ui = ui
 
 
+func _input(event: InputEvent):
+	if event is InputEventKey:
+		if event.pressed and not event.is_echo():
+			if event.keycode == KEY_F3 or event.keycode == KEY_QUOTELEFT:
+				if _can_toggle_debug():
+					_toggle_debug_panel()
+					get_viewport().set_input_as_handled()
+			elif event.keycode == KEY_P:
+				if _can_toggle_pause():
+					_toggle_pause_menu()
+					get_viewport().set_input_as_handled()
+
+
+func _can_toggle_pause() -> bool:
+	if _settings_ui != null and _settings_ui.visible:
+		return false
+	return true
+
+
+func _can_toggle_debug() -> bool:
+	if _pause_menu.visible:
+		return false
+	if _settings_ui != null and _settings_ui.visible:
+		return false
+	return _hud.has_node("DebugPanel")
+
+
+func _toggle_debug_panel():
+	_hud.get_node("DebugPanel").toggle()
+
+
+func _toggle_pause_menu():
+	if _pause_menu.visible:
+		_hide_pause_menu()
+	else:
+		_show_pause_menu()
+
+
+func _show_pause_menu():
+	if _hud.has_node("DebugPanel"):
+		_hud.get_node("DebugPanel").close_if_open()
+	_pause_menu.show()
+	get_tree().paused = true
+	_mouse_capture.set_ui_blocks_capture(true)
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+
+func _hide_pause_menu():
+	_pause_menu.hide()
+	get_tree().paused = false
+	_mouse_capture.set_ui_blocks_capture(false)
+	_mouse_capture.capture()
+
+
 func _unhandled_input(event: InputEvent):
 	if event is InputEventKey:
 		if event.pressed and not event.is_echo():
 			if event.keycode == KEY_ESCAPE:
-				if _settings_ui.visible:
+				if _settings_ui != null and _settings_ui.visible:
 					_settings_ui.hide()
-				elif _pause_menu.visible:
-					_pause_menu.hide()
-					_mouse_capture.capture()
-				else:
-					_pause_menu.show()
+					get_viewport().set_input_as_handled()
+				elif _can_toggle_pause():
+					_toggle_pause_menu()
+					get_viewport().set_input_as_handled()
 
 
 func _physics_process(delta: float):
@@ -261,6 +318,17 @@ func _physics_process(delta: float):
 
 
 func _process_setting_changes():
+	if _settings == null:
+		return
+	DDD.visible = _settings.show_display_on_screen_debug_overlay
+
+	var viewport := get_viewport()
+	if _settings.wireframe != (viewport.debug_draw == Viewport.DEBUG_DRAW_WIREFRAME):
+		if _settings.wireframe:
+			viewport.debug_draw = Viewport.DEBUG_DRAW_WIREFRAME
+		else:
+			viewport.debug_draw = Viewport.DEBUG_DRAW_DISABLED
+
 	# Update graphics settings
 	if _settings.shadows_enabled != _directional_light.shadow_enabled:
 		_directional_light.shadow_enabled = _settings.shadows_enabled
@@ -464,12 +532,13 @@ func _on_PauseMenu_exit_to_os_requested():
 
 
 func _on_PauseMenu_resume_requested():
-	_pause_menu.hide()
-	_mouse_capture.capture()
+	_hide_pause_menu()
 
 
 func _on_PauseMenu_settings_requested():
-	_settings_ui.show()
-	# The settings UI exists before the game is instanced so it might be behind.
-	# This makes sure it shows in front.
-	_settings_ui.move_to_front()
+	if _settings_ui != null:
+		_settings_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+		_settings_ui.show()
+		# The settings UI exists before the game is instanced so it might be behind.
+		# This makes sure it shows in front.
+		_settings_ui.move_to_front()

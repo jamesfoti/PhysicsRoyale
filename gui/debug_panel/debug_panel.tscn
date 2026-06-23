@@ -1,0 +1,86 @@
+[gd_scene load_steps=3 format=3 uid="uid://bqx7debugpanel1"]
+
+[ext_resource type="Script" path="res://gui/debug_panel/debug_panel.gd" id="1"]
+[ext_resource type="FontFile" path="res://gui/fonts/hack_regular_16_dynamic_font.tres" id="2"]
+
+[node name="DebugPanel" type="Control"]
+layout_mode = 3
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 12.0
+offset_right = -12.0
+grow_horizontal = 0
+mouse_filter = 0
+script = ExtResource("1")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_right = 208.0
+theme_override_constants/separation = 4
+
+[node name="ToggleButton" type="Button" parent="VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Debug (F3)"
+
+[node name="PanelContainer" type="PanelContainer" parent="VBox"]
+visible = false
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="VBox/PanelContainer"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Label" type="Label" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "HUD text"
+
+[node name="ShowDisplayOnScreenDebugOverlay" type="CheckBox" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Enabled"
+
+[node name="Label2" type="Label" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Octree nodes"
+
+[node name="ShowOctreeNodes" type="CheckBox" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Enabled"
+
+[node name="Label3" type="Label" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Mesh updates"
+
+[node name="ShowMeshUpdates" type="CheckBox" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Enabled"
+
+[node name="Label4" type="Label" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Edited data blocks"
+
+[node name="ShowEditedDataBlocks" type="CheckBox" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Enabled"
+
+[node name="Label5" type="Label" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Wireframe"
+
+[node name="Wireframe" type="CheckBox" parent="VBox/PanelContainer/VBox"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2")
+text = "Enabled"
+
+[connection signal="pressed" from="VBox/ToggleButton" to="." method="_on_toggle_button_pressed"]

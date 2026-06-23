@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://voxel_debug_info.gd" id="12_ysp6t"]
 [ext_resource type="Script" path="res://sounds/ambient_sounds.gd" id="13_esoyx"]
 [ext_resource type="AudioStream" uid="uid://pdsd7xlt73p1" path="res://sounds/deep_space.ogg" id="14_krriv"]
+[ext_resource type="PackedScene" path="res://gui/debug_panel/debug_panel.tscn" id="15_debug"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_cmlyd"]
 panorama = ExtResource("2_06f30")
@@ -92,6 +93,9 @@ grow_vertical = 2
 
 [node name="PlanetHoverSound" type="AudioStreamPlayer" parent="HUD"]
 stream = ExtResource("8_tvaq7")
+
+[node name="DebugPanel" parent="HUD" instance=ExtResource("15_debug")]
+layout_mode = 1
 
 [node name="LensFlare" type="Node" parent="."]
 script = ExtResource("9_w721i")

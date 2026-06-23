@@ -188,7 +188,7 @@ columns = 2
 layout_mode = 2
 text = "HUD text"
 
-[node name="ShowDebugText" type="CheckBox" parent="PC/MC/VB/TabContainer/Debug/GC"]
+[node name="ShowDisplayOnScreenDebugOverlay" type="CheckBox" parent="PC/MC/VB/TabContainer/Debug/GC"]
 layout_mode = 2
 text = "Enabled"
 
