@@ -10,11 +10,17 @@ const Ship = preload("../ship/ship.gd")
 @onready var _target_label_rect : Control = $TargetPlanetRect
 @onready var _waypoint_hud : WaypointHUD = $WaypointHUD
 @onready var _planet_hover_audio_player : AudioStreamPlayer = $PlanetHoverSound
+@onready var _crosshair : Control = $Crosshair
 
 var _target_planet_screen_pos := Vector2()
 var _pointed_body : StellarBody = null
 var _exit_hint_label : Label
 var _ship : Ship = null
+
+
+func set_crosshair_visible(show_crosshair: bool) -> void:
+	if _crosshair != null:
+		_crosshair.visible = show_crosshair
 
 
 func _ready():

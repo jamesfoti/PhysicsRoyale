@@ -165,6 +165,9 @@ func _try_exit_ship():
 	var camera : SS_Camera = get_viewport().get_camera_3d()
 	camera.set_target(character)
 	_ship.disable_controller()
+	var solar_system := _ship.get_solar_system()
+	if solar_system != null:
+		solar_system.set_character_control_mode(true)
 
 
 # TODO I could not use `_unhandled_input`

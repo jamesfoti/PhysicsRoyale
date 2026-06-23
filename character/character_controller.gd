@@ -6,7 +6,7 @@ const Util = preload("../util/util.gd")
 const CollisionLayers = preload("../collision_layers.gd")
 # TODO This is very close to Godot's CharacterBody3D. Introduce prefixes?
 # It could be confusing to not realize this is actually from the project and not Godot
-const PlanetWalkCharacter = preload("res://character/planet_walk_character.gd")
+const OrbitalCharacter = preload("res://character/orbital_character.gd")
 const SplitChunkRigidBodyComponent = preload("../solar_system/split_chunk_rigidbody_component.gd")
 const CharacterAudio = preload("./character_audio.gd")
 const Waypoint = preload("res://waypoints/waypoint.gd")
@@ -19,11 +19,14 @@ const MOVE_DAMP_FACTOR = 0.1
 const JUMP_COOLDOWN_TIME = 0.3
 const JUMP_SPEED = 8.0
 
+const TerrainEditCursor = preload("res://character/terrain_edit_cursor.gd")
+
 @onready var _head : Node3D = get_node("../Head")
 @onready var _visual_root : Node3D = get_node("../Visual")
 @onready var _visual_head : Node3D = get_node("../Visual/Head")
 @onready var _flashlight : SpotLight3D = get_node("../Visual/FlashLight")
 @onready var _audio : CharacterAudio = get_node("../Audio")
+@onready var _terrain_cursor : TerrainEditCursor = $TerrainEditCursor
 
 var _velocity := Vector3()
 var _dig_cmd := false
@@ -33,22 +36,19 @@ var _waypoint_cmd := false
 var _last_motor := Vector3()
 
 
-func _read_motor() -> Vector3:
-	var motor := Vector3()
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_Z):
-		motor.z += 1.0
-	if Input.is_key_pressed(KEY_S):
-		motor.z -= 1.0
-	if Input.is_key_pressed(KEY_A):
-		motor.x -= 1.0
-	if Input.is_key_pressed(KEY_D):
-		motor.x += 1.0
-	return motor
-
-
 func _physics_process(delta):
 	var character_body := _get_body()
-	var motor := _read_motor()
+	var motor := Vector3()
+
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_Z):
+		motor += Vector3(0, 0, -1)
+	if Input.is_key_pressed(KEY_S):
+		motor += Vector3(0, 0, 1)
+	if Input.is_key_pressed(KEY_A):
+		motor += Vector3(-1, 0, 0)
+	if Input.is_key_pressed(KEY_D):
+		motor += Vector3(1, 0, 0)
+
 	character_body.set_motor(motor)
 
 	var landing_body := _get_landing_body()
@@ -63,6 +63,13 @@ func _physics_process(delta):
 			planet_up = Vector3.UP
 		character_body.set_landing_body(null)
 	character_body.set_planet_up(planet_up)
+
+	var camera := get_viewport().get_camera_3d()
+	if camera != null:
+		var move_plane := Plane(planet_up, 0.0)
+		var move_back := move_plane.project(camera.global_transform.basis.z).normalized()
+		var move_right := move_plane.project(camera.global_transform.basis.x).normalized()
+		character_body.set_move_basis(move_right, move_back)
 	
 	_process_actions()
 	_process_undig()
@@ -102,8 +109,7 @@ func _process_undig():
 		var gtrans := character_body.global_transform
 		gtrans.origin = volume.get_global_transform() * offset_local_pos
 		character_body.global_transform = gtrans
-		character_body.linear_velocity = Vector3.ZERO
-		character_body.angular_velocity = Vector3.ZERO
+		character_body.velocity = Vector3.ZERO
 
 
 func _process_actions():
@@ -112,66 +118,70 @@ func _process_actions():
 		_interact()
 
 	var character_body := _get_body()
-	
+	var hit := _raycast_terrain_from_mouse()
+	var build_mode := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+
+	if hit.is_empty() or not hit.collider is VoxelLodTerrain:
+		_terrain_cursor.hide_cursor()
+		return
+
+	_terrain_cursor.show_at(hit.position, hit.normal, build_mode)
+
+	var volume : VoxelLodTerrain = hit.collider
+	var hit_position : Vector3 = hit.position
+
+	if _dig_cmd:
+		_dig_cmd = false
+		var vt : VoxelToolLodTerrain = volume.get_voxel_tool()
+		var pos := volume.get_global_transform().affine_inverse() * hit_position
+		var sphere_size := 3.5
+		vt.channel = VoxelBuffer.CHANNEL_SDF
+		vt.mode = VoxelTool.MODE_REMOVE
+		vt.do_sphere(pos, sphere_size)
+		_audio.play_dig(pos)
+
+		var camera := get_viewport().get_camera_3d()
+		var splitter_aabb := AABB(pos, Vector3()).grow(16.0)
+		var bodies := vt.separate_floating_chunks(splitter_aabb, camera.get_parent())
+		print("Created ", len(bodies), " bodies")
+		for body in bodies:
+			var cmp := SplitChunkRigidBodyComponent.new()
+			body.add_child(cmp)
+		DDD.draw_box_aabb(splitter_aabb, Color(0,1,0), 60)
+
+	if _build_cmd:
+		_build_cmd = false
+		var vt : VoxelTool = volume.get_voxel_tool()
+		var pos := volume.get_global_transform().affine_inverse() * hit_position
+		vt.channel = VoxelBuffer.CHANNEL_SDF
+		vt.mode = VoxelTool.MODE_ADD
+		vt.do_sphere(pos, 3.5)
+		_audio.play_dig(pos)
+
+	if _waypoint_cmd:
+		_waypoint_cmd = false
+		var planet := _get_landing_body()
+		if planet == null:
+			return
+		var waypoint : Waypoint = WaypointScene.instantiate()
+		waypoint.transform = Transform3D(character_body.transform.basis, hit_position)
+		planet.node.add_child(waypoint)
+		planet.waypoints.append(waypoint)
+		_audio.play_waypoint()
+
+
+func _raycast_terrain_from_mouse() -> Dictionary:
 	var camera := get_viewport().get_camera_3d()
-	var front := -camera.global_transform.basis.z
-	var cam_pos := camera.global_transform.origin
-	var space_state := character_body.get_world_3d().direct_space_state
-	
+	if camera == null:
+		return {}
+	var mouse_pos := get_viewport().get_mouse_position()
+	var ray_origin := camera.project_ray_origin(mouse_pos)
+	var ray_direction := camera.project_ray_normal(mouse_pos)
 	var ray_query := PhysicsRayQueryParameters3D.new()
-	ray_query.from = cam_pos
-	ray_query.to = cam_pos + front * 50.0
-	ray_query.exclude = [character_body.get_rid()]
-	var hit = space_state.intersect_ray(ray_query)
-
-	if not hit.is_empty():
-		if hit.collider is VoxelLodTerrain:
-			DDD.draw_box(hit.position, Vector3(0.5,0.5,0.5), Color(1,1,0))
-			DDD.draw_ray_3d(hit.position, hit.normal, 1.0, Color(1,1,0))
-	
-	if not hit.is_empty():
-		if hit.collider is VoxelLodTerrain:
-			var volume : VoxelLodTerrain = hit.collider
-			var hit_position : Vector3 = hit.position
-
-			if _dig_cmd:
-				_dig_cmd = false
-				var vt : VoxelToolLodTerrain = volume.get_voxel_tool()
-				var pos := volume.get_global_transform().affine_inverse() * hit_position
-				var sphere_size := 3.5
-				#pos -= front * (sphere_size * 0.9)
-				vt.channel = VoxelBuffer.CHANNEL_SDF
-				vt.mode = VoxelTool.MODE_REMOVE
-				vt.do_sphere(pos, sphere_size)
-				_audio.play_dig(pos)
-
-				var splitter_aabb := AABB(pos, Vector3()).grow(16.0)
-				var bodies := vt.separate_floating_chunks(splitter_aabb, camera.get_parent())
-				print("Created ", len(bodies), " bodies")
-				for body in bodies:
-					var cmp := SplitChunkRigidBodyComponent.new()
-					body.add_child(cmp)
-				DDD.draw_box_aabb(splitter_aabb, Color(0,1,0), 60)
-
-			if _build_cmd:
-				_build_cmd = false
-				var vt : VoxelTool = volume.get_voxel_tool()
-				var pos := volume.get_global_transform().affine_inverse() * hit_position
-				vt.channel = VoxelBuffer.CHANNEL_SDF
-				vt.mode = VoxelTool.MODE_ADD
-				vt.do_sphere(pos, 3.5)
-				_audio.play_dig(pos)
-			
-			if _waypoint_cmd:
-				_waypoint_cmd = false
-				var planet := _get_landing_body()
-				if planet == null:
-					return
-				var waypoint : Waypoint = WaypointScene.instantiate()
-				waypoint.transform = Transform3D(character_body.transform.basis, hit_position)
-				planet.node.add_child(waypoint)
-				planet.waypoints.append(waypoint)
-				_audio.play_waypoint()
+	ray_query.from = ray_origin
+	ray_query.to = ray_origin + ray_direction * 100.0
+	ray_query.exclude = [_get_body().get_rid()]
+	return _get_body().get_world_3d().direct_space_state.intersect_ray(ray_query)
 
 
 func _unhandled_input(event: InputEvent):
@@ -224,6 +234,9 @@ func _interact():
 
 
 func _enter_ship(ship: Ship):
+	var solar_system := _get_solar_system()
+	if solar_system != null:
+		solar_system.set_character_control_mode(false)
 	var camera = get_viewport().get_camera_3d()
 	camera.set_target(ship)
 	ship.enable_controller()
@@ -233,10 +246,12 @@ func _enter_ship(ship: Ship):
 func _process(delta: float):
 	var character_body := _get_body()
 	var gtrans := character_body.global_transform
+	var up := gtrans.basis.y
+
+	_sync_head_to_camera(up)
 
 	# We want to rotate only along local Y
 	var head_basis := _head.global_transform.basis
-	var up := gtrans.basis.y
 	var forward_projected := get_flat_forward_not_normalized(head_basis, up)
 	
 	# Visual can be offset.
@@ -284,8 +299,21 @@ func _get_landing_body() -> StellarBody:
 	return closest
 
 
-func _get_body() -> PlanetWalkCharacter:
-	return get_parent() as PlanetWalkCharacter
+func _get_body() -> OrbitalCharacter:
+	return get_parent() as OrbitalCharacter
+
+
+func _sync_head_to_camera(up: Vector3) -> void:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var plane := Plane(up, 0.0)
+	var look_dir := plane.project(-camera.global_transform.basis.z)
+	if look_dir.length_squared() < 0.0001:
+		return
+	look_dir = look_dir.normalized()
+	var head_pos := _head.global_position
+	_head.global_transform = Transform3D(Basis.looking_at(look_dir, up), head_pos)
 
 
 # Gets a vector pointing forwards from the specified basis, projected along the ground plane with specified normal.

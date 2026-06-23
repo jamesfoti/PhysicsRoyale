@@ -26,6 +26,12 @@ signal exit_to_menu_requested
 signal restart_requested
 
 
+## Multiplier for planetary day/night rotation (1 = default data, 0 = frozen).
+@export_range(0.0, 100.0, 0.01) var planet_spin_speed := 1.0
+## Multiplier for orbital motion around parent bodies (1 = default data, 0 = frozen).
+@export_range(0.0, 100.0, 0.01) var orbit_speed := 1.0
+
+
 @onready var _environment : Environment = $WorldEnvironment.environment
 @onready var _spawn_point : Node3D = $SpawnPoint
 @onready var _mouse_capture : MouseCapture = $MouseCapture
@@ -49,6 +55,15 @@ var _last_clouds_quality := -1
 
 func _create_bodies() -> Array[StellarBody]:
 	return SolarSystemSetup.create_solar_system_data(_settings)
+
+
+func set_character_control_mode(on_foot: bool) -> void:
+	_mouse_capture.set_capture_allowed(not on_foot)
+	_hud.set_crosshair_visible(not on_foot)
+	if on_foot:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	else:
+		_mouse_capture.capture()
 
 
 func _on_game_loaded():
@@ -266,14 +281,16 @@ func _physics_process(delta: float):
 	for i in len(_bodies):
 		var body : StellarBody = _bodies[i]
 		
-		if body.self_revolution_time > 0:
-			body.self_revolution_progress += delta / body.self_revolution_time
+		if body.self_revolution_time > 0.0 and planet_spin_speed > 0.0:
+			body.self_revolution_progress += \
+				delta / body.self_revolution_time * planet_spin_speed
 			if body.self_revolution_progress >= 1.0:
 				body.self_revolution_progress -= 1.0
 				body.day_count += 1
 		
-		if body.orbit_revolution_time > 0:
-			body.orbit_revolution_progress += delta / body.orbit_revolution_time
+		if body.orbit_revolution_time > 0.0 and orbit_speed > 0.0:
+			body.orbit_revolution_progress += \
+				delta / body.orbit_revolution_time * orbit_speed
 			if body.orbit_revolution_progress >= 1.0:
 				body.orbit_revolution_progress -= 1.0
 				body.year_count += 1

@@ -77,9 +77,7 @@ func _on_Character_jumped():
 
 func _process(delta):
 	var character = get_parent()
-	var landed := false
-	if character.has_method("is_on_floor"):
-		landed = character.is_on_floor()
+	var landed: bool = character.is_on_floor() if character is CharacterBody3D else false
 	if global_position.distance_to(_last_step_position) > _step_distance and landed:
 		_last_step_position = global_position
 		_play_step()
