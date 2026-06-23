@@ -28,7 +28,7 @@ material = SubResource("ShaderMaterial_md44f")
 offset_left = 376.0
 offset_top = 212.0
 offset_right = 776.0
-offset_bottom = 436.0
+offset_bottom = 472.0
 
 [node name="MarginContainer" type="MarginContainer" parent="CC/PanelContainer"]
 custom_minimum_size = Vector2(400, 0)
@@ -43,7 +43,7 @@ theme_override_constants/margin_bottom = 8
 offset_left = 8.0
 offset_top = 8.0
 offset_right = 392.0
-offset_bottom = 216.0
+offset_bottom = 252.0
 
 [node name="Label" type="Label" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]
 offset_right = 384.0
@@ -63,6 +63,10 @@ offset_top = 87.0
 offset_right = 384.0
 offset_bottom = 118.0
 text = "Settings"
+
+[node name="Restart" type="Button" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Restart"
 
 [node name="Control" type="Control" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]
 custom_minimum_size = Vector2(0, 16)
@@ -88,5 +92,6 @@ text = "Exit to OS"
 
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Resume" to="." method="_on_Resume_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Settings" to="." method="_on_Settings_pressed"]
+[connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Restart" to="." method="_on_Restart_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/ExitToMenu" to="." method="_on_ExitToMenu_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/ExitToOS" to="." method="_on_ExitToOs_pressed"]

@@ -3,6 +3,7 @@ extends Control
 const StellarBody = preload("../solar_system/stellar_body.gd")
 const WaypointHUD = preload("../waypoints/waypoint_hud.gd")
 const Util = preload("../util/util.gd")
+const Ship = preload("../ship/ship.gd")
 
 @onready var _solar_system : SolarSystem = get_parent()
 @onready var _target_planet_label : Label = $TargetPlanetLabel
@@ -12,10 +13,26 @@ const Util = preload("../util/util.gd")
 
 var _target_planet_screen_pos := Vector2()
 var _pointed_body : StellarBody = null
+var _exit_hint_label : Label
+var _ship : Ship = null
 
 
 func _ready():
 	_waypoint_hud.set_solar_system(_solar_system)
+	_ship = Util.find_node_by_type(_solar_system, Ship)
+	_exit_hint_label = Label.new()
+	_exit_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_exit_hint_label.anchor_left = 0.5
+	_exit_hint_label.anchor_right = 0.5
+	_exit_hint_label.anchor_top = 1.0
+	_exit_hint_label.anchor_bottom = 1.0
+	_exit_hint_label.offset_left = -200.0
+	_exit_hint_label.offset_right = 200.0
+	_exit_hint_label.offset_top = -72.0
+	_exit_hint_label.offset_bottom = -48.0
+	_exit_hint_label.text = "Hold Ctrl to land • Press E to exit beside ship"
+	_exit_hint_label.hide()
+	add_child(_exit_hint_label)
 
 
 func _process(_delta: float):
@@ -65,6 +82,8 @@ func _process(_delta: float):
 		if _pointed_body != null and _pointed_body != _solar_system.get_reference_stellar_body():
 			_planet_hover_audio_player.play()
 
+	_update_exit_hint(camera)
+
 
 func _get_stellar_body_type_name(body: StellarBody) -> String:
 	if body.type == StellarBody.TYPE_SUN:
@@ -91,6 +110,31 @@ func _find_pointed_planet(camera: Camera3D) -> StellarBody:
 				pointed_body = body
 				closest_distance_squared = d
 	return pointed_body
+
+
+func _update_exit_hint(_camera: Camera3D) -> void:
+	if _exit_hint_label == null:
+		return
+	if _ship == null:
+		_ship = Util.find_node_by_type(_solar_system, Ship)
+	if _ship == null:
+		_exit_hint_label.hide()
+		return
+	var controller := _ship.get_node_or_null("Controller")
+	if controller == null:
+		_exit_hint_label.hide()
+		return
+	if not controller.is_processing():
+		_exit_hint_label.hide()
+		return
+	if not controller.has_method("can_exit_ship"):
+		_exit_hint_label.hide()
+		return
+	var status: Dictionary = controller.call("can_exit_ship")
+	if status.get("can_exit", false):
+		_exit_hint_label.show()
+	else:
+		_exit_hint_label.hide()
 
 
 #static func int_max(a: int, b: int) -> int:

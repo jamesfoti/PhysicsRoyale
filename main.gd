@@ -1,4 +1,5 @@
 extends Node
+class_name Main
 
 const Settings = preload("res://settings.gd")
 
@@ -14,6 +15,10 @@ func _ready():
 
 
 func _on_MainMenu_start_requested():
+	_start_game()
+
+
+func _start_game() -> void:
 	assert(_game == null)
 	_main_menu.hide()
 	var game_scene : PackedScene = load("res://scenes/game.tscn")
@@ -21,7 +26,21 @@ func _on_MainMenu_start_requested():
 	_game.set_settings(_settings)
 	_game.set_settings_ui(_settings_ui)
 	_game.exit_to_menu_requested.connect(_on_game_exit_to_menu_requested)
+	_game.restart_requested.connect(_on_game_restart_requested)
 	add_child(_game)
+
+
+func _restart_game() -> void:
+	if _game != null:
+		remove_child(_game)
+		_game.free()
+		_game = null
+	get_tree().paused = false
+	_start_game()
+
+
+func _on_game_restart_requested():
+	_restart_game()
 
 
 func _on_MainMenu_settings_requested():

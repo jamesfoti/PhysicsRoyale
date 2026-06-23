@@ -12,11 +12,15 @@ const ReferenceChangeInfo = preload("res://solar_system/reference_change_info.gd
 
 const STATE_LANDED = 0
 const STATE_FLYING = 1
+const BRAKE_GROUND_LOCK_CLEARANCE := 4.0
 
 @export var linear_acceleration := 10.0
 @export var angular_acceleration := 1000.0
 @export var speed_cap_on_planet := 40.0
 @export var speed_cap_in_space := 400.0
+@export var brake_landing_trigger_distance := 300.0
+@export_range(0.05, 0.95, 0.01) var brake_landing_smoothness := 0.2
+@export_range(1.0, 50.0, 0.5) var brake_ground_lock_snap_distance := 12.0
 
 @onready var _visual_root : Node3D = $Visual/VisualRoot
 @onready var _controller : ShipController = $Controller
@@ -54,12 +58,16 @@ var _landed_node_parents : Array[Node] = []
 var _move_cmd := Vector3()
 var _turn_cmd := Vector3()
 var _superspeed_cmd := false
+var _brake_cmd := false
 var _exit_ship_cmd := false
 var _state := STATE_FLYING
 var _planet_damping_amount := 0.0 # TODO Doesnt need to be a member var
 var _ref_change_info : ReferenceChangeInfo
 var _was_superspeed := false
 var _last_contacts_count := 0
+var _ground_lock_active := false
+var _ground_lock_body : StellarBody = null
+var _ground_lock_local_transform := Transform3D.IDENTITY
 
 var _speed_cap_in_space_superspeed_multiplier := 10.0
 var _linear_acceleration_superspeed_multiplier := 15.0
@@ -91,6 +99,8 @@ func apply_game_settings(s: Settings):
 
 
 func enable_controller():
+	_ground_lock_active = false
+	_ground_lock_body = null
 	_controller.set_enabled(true)
 	for n in _landed_nodes:
 		n.get_parent().remove_child(n)
@@ -103,6 +113,7 @@ func enable_controller():
 
 
 func disable_controller():
+	_preserve_parked_ground_lock()
 	_controller.set_enabled(false)
 	for i in len(_landed_nodes):
 		_landed_node_parents[i].add_child(_landed_nodes[i])
@@ -154,6 +165,47 @@ func set_superspeed_cmd(cmd: bool):
 	_superspeed_cmd = cmd
 
 
+func set_brake_cmd(cmd: bool):
+	_brake_cmd = cmd
+
+
+func is_ground_locked() -> bool:
+	return _ground_lock_active and _ground_lock_body != null
+
+
+func get_ground_lock_body() -> StellarBody:
+	return _ground_lock_body
+
+
+func _physics_process(_delta: float) -> void:
+	_apply_parked_ground_lock()
+
+
+func _preserve_parked_ground_lock() -> void:
+	if _ground_lock_active and _ground_lock_body != null:
+		_ground_lock_local_transform = \
+			_ground_lock_body.node.global_transform.affine_inverse() * global_transform
+		return
+	var body := _find_nearest_rocky_body(global_transform.origin)
+	if body == null:
+		return
+	_ground_lock_body = body
+	_ground_lock_local_transform = body.node.global_transform.affine_inverse() * global_transform
+	_ground_lock_active = true
+
+
+func _apply_parked_ground_lock() -> void:
+	if _state != STATE_LANDED or not _ground_lock_active or _ground_lock_body == null:
+		return
+	if _ground_lock_body.node == null:
+		return
+	var locked_transform := _ground_lock_body.node.global_transform * _ground_lock_local_transform
+	global_transform = locked_transform
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	_visual_root.global_transform = locked_transform
+
+
 func _integrate_forces(state: PhysicsDirectBodyState3D):
 	if _ref_change_info != null:
 		# Teleport
@@ -165,6 +217,17 @@ func _integrate_forces(state: PhysicsDirectBodyState3D):
 	var forward := -gtrans.basis.z
 	var right := gtrans.basis.x
 	var up := gtrans.basis.y
+
+	if not _brake_cmd and _state != STATE_LANDED:
+		_ground_lock_active = false
+		_ground_lock_body = null
+
+	if _state == STATE_LANDED and _ground_lock_active and _ground_lock_body != null:
+		state.transform = _ground_lock_body.node.global_transform * _ground_lock_local_transform
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		_visual_root.global_transform = state.transform
+		return
 
 	var stellar_body : StellarBody = get_solar_system().get_reference_stellar_body()
 	var linear_acceleration_mod := linear_acceleration
@@ -226,6 +289,13 @@ func _integrate_forces(state: PhysicsDirectBodyState3D):
 	var speed := state.linear_velocity.length()
 	if speed > speed_cap:
 		state.linear_velocity = state.linear_velocity.normalized() * speed_cap
+
+	if _brake_cmd:
+		if not _try_apply_brake_ground_lock(state):
+			state.linear_velocity = state.linear_velocity.lerp(Vector3.ZERO, 0.35)
+			state.angular_velocity = state.angular_velocity.lerp(Vector3.ZERO, 0.5)
+		_move_cmd = Vector3.ZERO
+		_turn_cmd = Vector3.ZERO
 	
 	# Jets
 	var main_jet_power := _move_cmd.z
@@ -252,4 +322,102 @@ func _integrate_forces(state: PhysicsDirectBodyState3D):
 
 func get_last_contacts_count() -> int:
 	return _last_contacts_count
+
+
+func _try_apply_brake_ground_lock(state: PhysicsDirectBodyState3D) -> bool:
+	var body := _find_nearest_rocky_body(state.transform.origin)
+	if body == null:
+		_ground_lock_active = false
+		_ground_lock_body = null
+		return false
+
+	var center := body.node.global_transform.origin
+	var up := (state.transform.origin - center).normalized()
+	var distance_to_surface := state.transform.origin.distance_to(center) - body.radius
+	if distance_to_surface > brake_landing_trigger_distance:
+		_ground_lock_active = false
+		_ground_lock_body = null
+		return false
+
+	if _ground_lock_active and _ground_lock_body == body:
+		state.transform = body.node.global_transform * _ground_lock_local_transform
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		return true
+
+	# Deterministic landing target direction: nearest point on planet sphere from ship position.
+	var target_normal: Vector3 = up
+	var target_pos: Vector3 = center + target_normal * (body.radius + BRAKE_GROUND_LOCK_CLEARANCE)
+	var surface_sampling_margin := maxf(brake_landing_trigger_distance, 150.0)
+	var surface_raycast_length := maxf(brake_landing_trigger_distance * 2.5, 220.0)
+	var space_state := state.get_space_state()
+	var ray_query := PhysicsRayQueryParameters3D.new()
+	ray_query.from = center + target_normal * (body.radius + surface_sampling_margin)
+	ray_query.to = center + target_normal * maxf(body.radius - surface_raycast_length, 1.0)
+	ray_query.exclude = [get_rid()]
+	var hit := space_state.intersect_ray(ray_query)
+	if not hit.is_empty():
+		var hit_normal: Vector3 = hit.normal.normalized()
+		target_normal = hit_normal
+		target_pos = hit.position + hit_normal * BRAKE_GROUND_LOCK_CLEARANCE
+	var target_basis: Basis = _align_basis_to_up(state.transform.basis, target_normal)
+
+	var current_transform := state.transform
+	var pos_lerp_factor := brake_landing_smoothness
+	if distance_to_surface < 15.0:
+		pos_lerp_factor = minf(0.7, pos_lerp_factor + 0.15)
+	var smoothed_pos := current_transform.origin.lerp(target_pos, pos_lerp_factor)
+
+	var q_current := current_transform.basis.orthonormalized().get_rotation_quaternion()
+	var q_target := target_basis.orthonormalized().get_rotation_quaternion()
+	var rot_lerp_factor := clampf(brake_landing_smoothness * 0.9, 0.05, 0.9)
+	var q_smoothed := q_current.slerp(q_target, rot_lerp_factor).normalized()
+	var smoothed_basis := Basis(q_smoothed).orthonormalized()
+
+	state.transform = Transform3D(smoothed_basis, smoothed_pos)
+
+	var lock_distance := smoothed_pos.distance_to(target_pos)
+	var near_surface := distance_to_surface < maxf(BRAKE_GROUND_LOCK_CLEARANCE * 2.5, 10.0)
+	var should_lock := lock_distance < brake_ground_lock_snap_distance or near_surface
+	if should_lock:
+		state.transform = Transform3D(target_basis, target_pos)
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		_ground_lock_active = true
+		_ground_lock_body = body
+		_ground_lock_local_transform = body.node.global_transform.affine_inverse() * state.transform
+	else:
+		state.linear_velocity = state.linear_velocity.lerp(Vector3.ZERO, 0.25)
+		state.angular_velocity = state.angular_velocity.lerp(Vector3.ZERO, 0.3)
+		_ground_lock_active = false
+		_ground_lock_body = null
+	return true
+
+
+func _find_nearest_rocky_body(pos: Vector3) -> StellarBody:
+	var solar_system := get_solar_system()
+	if solar_system == null:
+		return null
+	var nearest: StellarBody = null
+	var nearest_surface_distance := INF
+	for i in solar_system.get_stellar_body_count():
+		var body: StellarBody = solar_system.get_stellar_body(i)
+		if body.type != StellarBody.TYPE_ROCKY:
+			continue
+		var center := body.node.global_transform.origin
+		var surface_distance := absf(pos.distance_to(center) - body.radius)
+		if surface_distance < nearest_surface_distance:
+			nearest_surface_distance = surface_distance
+			nearest = body
+	return nearest
+
+
+static func _align_basis_to_up(current_basis: Basis, target_up: Vector3) -> Basis:
+	var forward := -current_basis.z
+	var projected_forward := (forward - target_up * forward.dot(target_up)).normalized()
+	if projected_forward.length_squared() < 0.001:
+		projected_forward = (current_basis.x - target_up * current_basis.x.dot(target_up)).normalized()
+	if projected_forward.length_squared() < 0.001:
+		projected_forward = Vector3.FORWARD
+	return Basis.looking_at(projected_forward, target_up)
 

@@ -11,6 +11,7 @@ const LensFlare = preload("res://addons/SIsilicon.vfx.lens flare/lens-flare.gd")
 const SS_Camera = preload("res://camera/camera.gd")
 const ReferenceChangeInfo = preload("./reference_change_info.gd")
 const LoadingProgress = preload("./loading_progress.gd")
+const Main = preload("res://main.gd")
 
 const CameraScene = preload("../camera/camera.tscn")
 const ShipScene = preload("../ship/ship.tscn")
@@ -22,6 +23,7 @@ const BODY_REFERENCE_EXIT_RADIUS_FACTOR = 3.1 # Must be higher for hysteresis
 signal reference_body_changed(info)
 signal loading_progressed(info)
 signal exit_to_menu_requested
+signal restart_requested
 
 
 @onready var _environment : Environment = $WorldEnvironment.environment
@@ -519,6 +521,17 @@ func _save_world():
 	for body in _bodies:
 		if body.volume != null:
 			body.volume.save_modified_blocks()
+
+
+func _on_PauseMenu_restart_requested():
+	_save_world()
+	_hide_pause_menu()
+	get_tree().paused = false
+	var parent := get_parent()
+	if parent is Main:
+		restart_requested.emit()
+	else:
+		get_tree().change_scene_to_file(scene_file_path)
 
 
 func _on_PauseMenu_exit_to_menu_requested():

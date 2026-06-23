@@ -6,7 +6,7 @@ const Util = preload("../util/util.gd")
 const CollisionLayers = preload("../collision_layers.gd")
 # TODO This is very close to Godot's CharacterBody3D. Introduce prefixes?
 # It could be confusing to not realize this is actually from the project and not Godot
-const CharacterBody = preload("res://addons/zylann.3d_basics/character/character.gd")
+const PlanetWalkCharacter = preload("res://character/planet_walk_character.gd")
 const SplitChunkRigidBodyComponent = preload("../solar_system/split_chunk_rigidbody_component.gd")
 const CharacterAudio = preload("./character_audio.gd")
 const Waypoint = preload("res://waypoints/waypoint.gd")
@@ -33,24 +33,35 @@ var _waypoint_cmd := false
 var _last_motor := Vector3()
 
 
-func _physics_process(delta):
+func _read_motor() -> Vector3:
 	var motor := Vector3()
-	
-	if Input.is_key_pressed(KEY_W):
-		motor += Vector3(0, 0, -1)
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_Z):
+		motor.z += 1.0
 	if Input.is_key_pressed(KEY_S):
-		motor += Vector3(0, 0, 1)
+		motor.z -= 1.0
 	if Input.is_key_pressed(KEY_A):
-		motor += Vector3(-1, 0, 0)
+		motor.x -= 1.0
 	if Input.is_key_pressed(KEY_D):
-		motor += Vector3(1, 0, 0)
-	
+		motor.x += 1.0
+	return motor
+
+
+func _physics_process(delta):
 	var character_body := _get_body()
+	var motor := _read_motor()
 	character_body.set_motor(motor)
 
-	var planet_center := Vector3()
-	var gtrans := character_body.global_transform
-	var planet_up := (gtrans.origin - planet_center).normalized()
+	var landing_body := _get_landing_body()
+	var planet_up: Vector3
+	if landing_body != null:
+		var planet_center := landing_body.node.global_transform.origin
+		planet_up = (character_body.global_position - planet_center).normalized()
+		character_body.set_landing_body(landing_body)
+	else:
+		planet_up = character_body.global_position.normalized()
+		if planet_up.length_squared() < 0.001:
+			planet_up = Vector3.UP
+		character_body.set_landing_body(null)
 	character_body.set_planet_up(planet_up)
 	
 	_process_actions()
@@ -60,14 +71,19 @@ func _physics_process(delta):
 
 
 func _process_undig():
+	var character_body := _get_body()
+	if character_body.is_spawn_settling():
+		return
 	var solar_system := _get_solar_system()
 	if solar_system == null:
 		# In testing scene?
 		return
-	var volume := solar_system.get_reference_stellar_body().volume
+	var landing_body := _get_landing_body()
+	if landing_body == null or landing_body.volume == null:
+		return
+	var volume := landing_body.volume
 	var vt : VoxelToolLodTerrain = volume.get_voxel_tool()
 	var to_local := volume.global_transform.affine_inverse()
-	var character_body := _get_body()
 	var local_pos := to_local * character_body.global_transform.origin
 	vt.channel = VoxelBuffer.CHANNEL_SDF
 	var sdf := vt.get_voxel_f_interpolated(local_pos)
@@ -86,6 +102,8 @@ func _process_undig():
 		var gtrans := character_body.global_transform
 		gtrans.origin = volume.get_global_transform() * offset_local_pos
 		character_body.global_transform = gtrans
+		character_body.linear_velocity = Vector3.ZERO
+		character_body.angular_velocity = Vector3.ZERO
 
 
 func _process_actions():
@@ -146,7 +164,9 @@ func _process_actions():
 			
 			if _waypoint_cmd:
 				_waypoint_cmd = false
-				var planet := _get_solar_system().get_reference_stellar_body()
+				var planet := _get_landing_body()
+				if planet == null:
+					return
 				var waypoint : Waypoint = WaypointScene.instantiate()
 				waypoint.transform = Transform3D(character_body.transform.basis, hit_position)
 				planet.node.add_child(waypoint)
@@ -216,9 +236,8 @@ func _process(delta: float):
 
 	# We want to rotate only along local Y
 	var head_basis := _head.global_transform.basis
-	var forward_projected := get_flat_forward_not_normalized(head_basis, _visual_root.global_transform.basis.y)
-
 	var up := gtrans.basis.y
+	var forward_projected := get_flat_forward_not_normalized(head_basis, up)
 	
 	# Visual can be offset.
 	# We need global transfotm tho cuz look_at wants a global position
@@ -236,12 +255,37 @@ func _process(delta: float):
 
 
 func _get_solar_system() -> SolarSystem:
-	# TODO That looks really bad. Probably need to use injection some day
-	return get_parent().get_parent() as SolarSystem
+	var node: Node = get_parent()
+	while node != null:
+		if node is SolarSystem:
+			return node as SolarSystem
+		node = node.get_parent()
+	return null
 
 
-func _get_body() -> CharacterBody:
-	return get_parent() as CharacterBody
+func _get_landing_body() -> StellarBody:
+	var solar_system := _get_solar_system()
+	if solar_system == null:
+		return null
+	var character_body := _get_body()
+	var ref_body := solar_system.get_reference_stellar_body()
+	if ref_body.type == StellarBody.TYPE_ROCKY and ref_body.volume != null:
+		return ref_body
+	var closest: StellarBody = null
+	var closest_d := INF
+	for i in solar_system.get_stellar_body_count():
+		var b: StellarBody = solar_system.get_stellar_body(i)
+		if b.type != StellarBody.TYPE_ROCKY or b.volume == null:
+			continue
+		var d := b.node.global_transform.origin.distance_to(character_body.global_position)
+		if d < b.radius * 4.0 and d < closest_d:
+			closest = b
+			closest_d = d
+	return closest
+
+
+func _get_body() -> PlanetWalkCharacter:
+	return get_parent() as PlanetWalkCharacter
 
 
 # Gets a vector pointing forwards from the specified basis, projected along the ground plane with specified normal.

@@ -164,4 +164,5 @@ bus = &"SFX"
 [connection signal="exit_to_menu_requested" from="PauseMenu" to="." method="_on_PauseMenu_exit_to_menu_requested"]
 [connection signal="exit_to_os_requested" from="PauseMenu" to="." method="_on_PauseMenu_exit_to_os_requested"]
 [connection signal="resume_requested" from="PauseMenu" to="." method="_on_PauseMenu_resume_requested"]
+[connection signal="restart_requested" from="PauseMenu" to="." method="_on_PauseMenu_restart_requested"]
 [connection signal="settings_requested" from="PauseMenu" to="." method="_on_PauseMenu_settings_requested"]

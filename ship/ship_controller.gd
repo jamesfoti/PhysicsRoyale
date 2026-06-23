@@ -4,6 +4,12 @@ const StellarBody = preload("../solar_system/stellar_body.gd")
 var CharacterScene = load("res://character/character.tscn")
 const SS_Camera = preload("res://camera/camera.gd")
 
+const UPRIGHT_DOT_THRESHOLD := 0.75
+const GROUND_RAY_LENGTH := 8.0
+const SPAWN_FORWARD_OFFSET := 5.0
+const SPAWN_LIFT := 2.0
+const FOOT_CLEARANCE := 0.5
+
 @onready var _ship : Ship = get_parent()
 @onready var _character_spawn_position_node : Node3D = get_node("../CharacterSpawnPosition")
 @onready var _ground_check_position_node : Node3D = get_node("../GroundCheckPosition")
@@ -18,11 +24,44 @@ var _exit_ship_cmd := false
 func set_enabled(enabled: bool):
 	set_process(enabled)
 	set_process_input(enabled)
+	set_physics_process(enabled)
 
 
-func _process(delta: float):
+func can_exit_ship() -> Dictionary:
+	var result := {"can_exit": false}
+	if not is_processing():
+		return result
+	if not _ship.is_ground_locked():
+		return result
+	var landing_body: StellarBody = _ship.get_ground_lock_body()
+	if landing_body == null or landing_body.type != StellarBody.TYPE_ROCKY:
+		return result
+
+	var ship_trans := _ship.global_transform
+	var planet_center := landing_body.node.global_transform.origin
+	var down := (planet_center - ship_trans.origin).normalized()
+	if down.dot(-ship_trans.basis.y) < UPRIGHT_DOT_THRESHOLD:
+		return result
+
+	var ground_check_pos := _ground_check_position_node.global_transform.origin
+	var space_state := _ship.get_world_3d().direct_space_state
+	var ray_query := PhysicsRayQueryParameters3D.new()
+	ray_query.from = ground_check_pos
+	ray_query.to = ground_check_pos + down * 2.0
+	ray_query.exclude = [_ship.get_rid()]
+	if space_state.intersect_ray(ray_query).is_empty():
+		return result
+
+	var spawn_data: Dictionary = _get_exit_spawn_position(landing_body, down, space_state)
+	if spawn_data.is_empty():
+		return result
+
+	result.can_exit = true
+	return result
+
+
+func _process(_delta: float):
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-		# The UI probably has focus
 		return
 	
 	var motor := Vector3()
@@ -31,21 +70,22 @@ func _process(delta: float):
 		motor.z -= 1
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_Z):
 		motor.z += 1
-#	if Input.is_key_pressed(KEY_A):
-#		motor.x -= 1
-#	if Input.is_key_pressed(KEY_D):
-#		motor.x += 1
 	if Input.is_key_pressed(KEY_SPACE):
 		motor.y += 1
 	if Input.is_key_pressed(KEY_SHIFT):
 		motor.y -= 1
+
+	if Input.is_key_pressed(KEY_CTRL):
+		motor = Vector3.ZERO;
+		_turn_cmd = Vector3.ZERO;
 
 	if Input.is_key_pressed(KEY_A):
 		_turn_cmd.z -= keyboard_turn_sensitivity
 	if Input.is_key_pressed(KEY_D):
 		_turn_cmd.z += keyboard_turn_sensitivity
 	
-	_ship.set_superspeed_cmd(Input.is_key_pressed(KEY_SPACE))
+	_ship.set_superspeed_cmd(Input.is_key_pressed(KEY_SPACE) and not Input.is_key_pressed(KEY_CTRL))
+	_ship.set_brake_cmd(Input.is_key_pressed(KEY_CTRL))
 	
 	_turn_cmd.x = clampf(_turn_cmd.x, -1.0, 1.0)
 	_turn_cmd.y = clampf(_turn_cmd.y, -1.0, 1.0)
@@ -57,8 +97,6 @@ func _process(delta: float):
 	_ship.set_move_cmd(motor)
 	_ship.set_turn_cmd(_turn_cmd)
 	_turn_cmd = Vector3()
-	#ship.set_antiroll(not Input.is_key_pressed(KEY_CONTROL))
-#	flyer.set_turn_cmd(turn)
 
 
 func _physics_process(_delta: float):
@@ -70,58 +108,63 @@ func _physics_process(_delta: float):
 		_process_dig_actions()
 		
 
-func _try_exit_ship():
-	var ship := _ship
-	if ship.linear_velocity.length() > 1.0:
-		# Still moving
-		print("Still moving")
-		return
-	var stellar_body : StellarBody = ship.get_solar_system().get_reference_stellar_body()
-	if stellar_body.type != StellarBody.TYPE_ROCKY:
-		# Can't walk on this
-		print("Can't walk on this")
-		return
-	var planet_center := stellar_body.node.global_transform.origin
-	var space_state : PhysicsDirectSpaceState3D = ship.get_world_3d().direct_space_state
-	var ship_trans : Transform3D = ship.global_transform
-	var ship_pos : Vector3 = ship_trans.origin
-	var down := (planet_center - ship_pos).normalized()
-	# Is the ship not upside down?
-	if down.dot(-ship_trans.basis.y) < 0.8:
-		# The ship isn't right
-		print("Ship not straight")
-		return
-	var ground_check_pos := _ground_check_position_node.global_transform.origin
+func _get_exit_spawn_position(
+		_landing_body: StellarBody,
+		down: Vector3,
+		space_state: PhysicsDirectSpaceState3D) -> Dictionary:
+	var ship_trans := _ship.global_transform
+	var surface_up := -down.normalized()
+	var forward := -ship_trans.basis.z
+	forward = (forward - surface_up * forward.dot(surface_up)).normalized()
+	if forward.length_squared() < 0.001:
+		forward = ship_trans.basis.x
 
+	# Place the exit point on the ground ahead of the ship nose, not under the hull.
+	var hatch_pos := _character_spawn_position_node.global_transform.origin
+	var ray_origin := hatch_pos + forward * SPAWN_FORWARD_OFFSET + surface_up * SPAWN_LIFT
 	var ray_query := PhysicsRayQueryParameters3D.new()
-	ray_query.from = ground_check_pos
-	ray_query.to = ground_check_pos + down * 2.0
-	ray_query.exclude = [ship.get_rid()]
+	ray_query.from = ray_origin
+	ray_query.to = ray_origin + down * (GROUND_RAY_LENGTH + SPAWN_LIFT)
+	ray_query.exclude = [_ship.get_rid()]
 	var hit := space_state.intersect_ray(ray_query)
-
 	if hit.is_empty():
-		# No ground under the ship
-		print("No ground under ship")
-		return
-	var spawn_pos := _character_spawn_position_node.global_transform.origin
+		return {}
+	return {
+		"position": hit.position + hit.normal * FOOT_CLEARANCE,
+		"normal": hit.normal,
+	}
 
-	#var ray_query := PhysicsRayQueryParameters3D.new()
-	ray_query.from = spawn_pos
-	ray_query.to = spawn_pos + down * 5.0
-	ray_query.exclude = []
-	hit = space_state.intersect_ray(ray_query)
 
-	if hit.is_empty():
-		# No ground under spawn position
-		print("No ground under spawn position")
+func _try_exit_ship():
+	var status := can_exit_ship()
+	if not status.get("can_exit", false):
 		return
-	# Let's do this
+
+	var landing_body: StellarBody = _ship.get_ground_lock_body()
+	var ship_trans := _ship.global_transform
+	var planet_center := landing_body.node.global_transform.origin
+	var surface_up := (ship_trans.origin - planet_center).normalized()
+	var down := -surface_up
+	var space_state := _ship.get_world_3d().direct_space_state
+	var spawn_data: Dictionary = _get_exit_spawn_position(landing_body, down, space_state)
+	if spawn_data.is_empty():
+		return
+
+	var up: Vector3 = spawn_data["normal"]
+	var spawn_pos: Vector3 = spawn_data["position"]
+
+	var forward := -ship_trans.basis.z
+	forward = (forward - up * forward.dot(up)).normalized()
+	if forward.length_squared() < 0.001:
+		forward = ship_trans.basis.x
+
 	var character : Node3D = CharacterScene.instantiate()
-	character.position = spawn_pos
-	ship.get_parent().add_child(character)
+	character.configure_spawn(spawn_pos, up, forward, landing_body)
+	_ship.get_solar_system().add_child(character)
+
 	var camera : SS_Camera = get_viewport().get_camera_3d()
 	camera.set_target(character)
-	ship.disable_controller()
+	_ship.disable_controller()
 
 
 # TODO I could not use `_unhandled_input`
@@ -172,4 +215,3 @@ func _process_dig_actions():
 				vt.channel = VoxelBuffer.CHANNEL_SDF
 				vt.mode = VoxelTool.MODE_REMOVE
 				vt.do_sphere(pos, sphere_size)
-
