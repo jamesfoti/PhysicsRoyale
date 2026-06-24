@@ -1,124 +1,307 @@
-extends Node
+extends RigidBody3D
 
-const StellarBody = preload("../solar_system/stellar_body.gd")
+# Planet walking based on Pigeonaut's RigidBody approach:
+# https://www.youtube.com/watch?v=aL8TB_mB3j8
+
 const Ship = preload("../ship/ship.gd")
 const Util = preload("../util/util.gd")
 const CollisionLayers = preload("../collision_layers.gd")
-# TODO This is very close to Godot's CharacterBody3D. Introduce prefixes?
-# It could be confusing to not realize this is actually from the project and not Godot
-const OrbitalCharacter = preload("res://character/orbital_character.gd")
+const StellarBody = preload("../solar_system/stellar_body.gd")
 const SplitChunkRigidBodyComponent = preload("../solar_system/split_chunk_rigidbody_component.gd")
 const CharacterAudio = preload("./character_audio.gd")
 const Waypoint = preload("res://waypoints/waypoint.gd")
+const TerrainEditCursor = preload("res://character/terrain_edit_cursor.gd")
+const CameraOrbit = preload("res://character/camera_orbit.gd")
 
 const WaypointScene = preload("../waypoints/waypoint.tscn")
 
-const VERTICAL_CORRECTION_SPEED = PI
-const MOVE_ACCELERATION = 40.0
-const MOVE_DAMP_FACTOR = 0.1
-const JUMP_COOLDOWN_TIME = 0.3
-const JUMP_SPEED = 8.0
+@export var move_force := 30.0
+@export var jump_impulse := 20.0
+@export var max_gravity_force := 25.0
+@export var floor_normal_dot := 0.45
+@export var foot_surface_clearance := 0.2
+@export var ground_snap_ray_length := 4.0
+@export var undig_check_interval := 15
+signal jumped
 
-const TerrainEditCursor = preload("res://character/terrain_edit_cursor.gd")
+@onready var _head: Node3D = $Head
+@onready var _visual_root: Node3D = $Visual
+@onready var _visual_head: Node3D = $Visual/Head
+@onready var _flashlight: SpotLight3D = $Visual/FlashLight
+@onready var _audio: CharacterAudio = $Audio
+@onready var _terrain_cursor: TerrainEditCursor = $TerrainEditCursor
 
-@onready var _head : Node3D = get_node("../Head")
-@onready var _visual_root : Node3D = get_node("../Visual")
-@onready var _visual_head : Node3D = get_node("../Visual/Head")
-@onready var _flashlight : SpotLight3D = get_node("../Visual/FlashLight")
-@onready var _audio : CharacterAudio = get_node("../Audio")
-@onready var _terrain_cursor : TerrainEditCursor = $TerrainEditCursor
-
-var _velocity := Vector3()
+var _motor := Vector3.ZERO
+var _move_right := Vector3.RIGHT
+var _move_forward := Vector3.FORWARD
+var _planet_up := Vector3.UP
+var _gravity_direction := Vector3.DOWN
+var _landing_body: StellarBody = null
+var _jump_cmd := false
+var _on_floor := false
+var _spawn_settle_frames := 0
 var _dig_cmd := false
 var _interact_cmd := false
 var _build_cmd := false
 var _waypoint_cmd := false
-var _last_motor := Vector3()
+
+var _planet_lock_local_transform := Transform3D.IDENTITY
+var _planet_lock_body: StellarBody = null
+var _was_idle_on_planet := false
+var _last_planet_transform := Transform3D.IDENTITY
+
+var _pending_spawn := false
+var _pending_spawn_transform := Transform3D.IDENTITY
+var _undig_check_counter := 0
+var _terrain_hover_hit := {}
 
 
-func _physics_process(delta):
-	var character_body := _get_body()
-	var motor := Vector3()
+func configure_spawn(spawn_pos: Vector3, up: Vector3, forward: Vector3, planet: StellarBody = null) -> void:
+	_planet_up = up.normalized()
+	_landing_body = planet
+	_pending_spawn_transform = Transform3D(_make_surface_basis(up, forward), spawn_pos)
+	_pending_spawn = true
+	var orbit := get_node_or_null("CameraOrbit") as CameraOrbit
+	if orbit != null:
+		orbit.align_yaw_to_forward(up, forward)
 
+
+func is_spawn_settling() -> bool:
+	return _spawn_settle_frames > 0
+
+
+func is_on_floor() -> bool:
+	return _on_floor
+
+
+func is_landed() -> bool:
+	return _on_floor
+
+
+func set_gravity_planet(planet: StellarBody) -> void:
+	_landing_body = planet
+
+
+func clear_gravity_planet(planet: StellarBody) -> void:
+	if _landing_body == planet:
+		_landing_body = null
+
+
+func _ready() -> void:
+	can_sleep = false
+	gravity_scale = 0.0
+	if _pending_spawn:
+		global_transform = _pending_spawn_transform
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		sleeping = false
+		_spawn_settle_frames = 30
+		_pending_spawn = false
+	if _landing_body != null and _landing_body.node != null:
+		_planet_lock_body = _landing_body
+		_planet_lock_local_transform = \
+			_landing_body.node.global_transform.affine_inverse() * global_transform
+
+
+func _physics_process(_delta: float) -> void:
+	if _spawn_settle_frames > 0:
+		_spawn_settle_frames -= 1
+
+	_read_motor_input()
+	_update_landing_body()
+	_process_action_commands()
+	_process_undig()
+
+
+func _process(_delta: float) -> void:
+	_update_terrain_hover()
+	_process_visuals(_delta)
+
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	_update_gravity_direction(state)
+
+	var up := (-_gravity_direction).normalized()
+	if up.length_squared() < 0.0001:
+		up = _planet_up
+
+	_on_floor = _check_floor(state, up)
+
+	var move_dir := _get_planar_move_direction(state, up)
+	var has_motor_input := _motor.length_squared() > 0.001
+	var is_idle := _on_floor and not has_motor_input
+
+	if _on_floor and _landing_body != null and _landing_body.node != null and is_idle:
+		if not _was_idle_on_planet or _planet_lock_body != _landing_body:
+			_capture_planet_lock(state, _landing_body)
+		_apply_planet_lock(state, _landing_body)
+		_was_idle_on_planet = true
+		if _jump_cmd:
+			_clear_planet_lock()
+			state.apply_central_impulse(up * jump_impulse)
+			_on_floor = false
+			jumped.emit()
+		_jump_cmd = false
+		return
+
+	if _landing_body != null:
+		_walk_around_planet(state)
+		up = state.transform.basis.y.normalized()
+		if up.length_squared() < 0.0001:
+			up = _planet_up
+
+	_was_idle_on_planet = false
+
+	if _on_floor and _landing_body != null and _landing_body.node != null:
+		if _last_planet_transform == Transform3D.IDENTITY:
+			_last_planet_transform = _landing_body.node.global_transform
+		_apply_planet_motion_delta(state, _landing_body)
+		_cancel_velocity_into_ground(state, up)
+
+	if has_motor_input:
+		var force_dir := move_dir
+		if force_dir.length_squared() < 0.001:
+			force_dir = (
+				state.transform.basis.x * _motor.x
+				+ state.transform.basis.z * _motor.z
+			)
+		if force_dir.length_squared() > 0.001:
+			state.apply_central_force(force_dir.normalized() * move_force)
+
+	if _landing_body != null:
+		_apply_planet_gravity(state)
+
+	if not _on_floor:
+		_clear_planet_lock()
+
+	if _jump_cmd and _on_floor:
+		_clear_planet_lock()
+		state.apply_central_impulse(up * jump_impulse)
+		_on_floor = false
+		jumped.emit()
+	_jump_cmd = false
+
+
+func _process_visuals(delta: float) -> void:
+	var up := _planet_up
+	if up.length_squared() < 0.0001:
+		up = global_transform.basis.y
+	_sync_head_to_camera(up)
+
+	# Yaw the visual mesh in local space only — the RigidBody basis already
+	# handles planet alignment; a global look_at on the child was flipping the model.
+	var head_forward := get_flat_forward_not_normalized(_head.global_transform.basis, up)
+	if head_forward.length_squared() > 0.001:
+		var local_forward := global_transform.basis.transposed() * head_forward.normalized()
+		local_forward.y = 0.0
+		if local_forward.length_squared() > 0.001:
+			local_forward = local_forward.normalized()
+			var target_yaw_basis := Basis.looking_at(local_forward, Vector3.UP)
+			_visual_root.transform.basis = \
+				_visual_root.transform.basis.slerp(target_yaw_basis, delta * 8.0)
+
+	_visual_head.global_transform.basis = _head.global_transform.basis
+
+
+func _read_motor_input() -> void:
+	_motor = Vector3()
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_Z):
-		motor += Vector3(0, 0, -1)
+		_motor += Vector3(0, 0, 1)
 	if Input.is_key_pressed(KEY_S):
-		motor += Vector3(0, 0, 1)
+		_motor += Vector3(0, 0, -1)
 	if Input.is_key_pressed(KEY_A):
-		motor += Vector3(-1, 0, 0)
+		_motor += Vector3(-1, 0, 0)
 	if Input.is_key_pressed(KEY_D):
-		motor += Vector3(1, 0, 0)
-
-	character_body.set_motor(motor)
-
-	var landing_body := _get_landing_body()
-	var planet_up: Vector3
-	if landing_body != null:
-		var planet_center := landing_body.node.global_transform.origin
-		planet_up = (character_body.global_position - planet_center).normalized()
-		character_body.set_landing_body(landing_body)
-	else:
-		planet_up = character_body.global_position.normalized()
-		if planet_up.length_squared() < 0.001:
-			planet_up = Vector3.UP
-		character_body.set_landing_body(null)
-	character_body.set_planet_up(planet_up)
+		_motor += Vector3(1, 0, 0)
 
 	var camera := get_viewport().get_camera_3d()
 	if camera != null:
-		var move_plane := Plane(planet_up, 0.0)
-		var move_back := move_plane.project(camera.global_transform.basis.z).normalized()
-		var move_right := move_plane.project(camera.global_transform.basis.x).normalized()
-		character_body.set_move_basis(move_right, move_back)
-	
-	_process_actions()
-	_process_undig()
-	
-	_last_motor = motor
+		var move_plane := Plane(_planet_up, 0.0)
+		_move_forward = move_plane.project(-camera.global_transform.basis.z).normalized()
+		_move_right = move_plane.project(camera.global_transform.basis.x).normalized()
 
 
-func _process_undig():
-	var character_body := _get_body()
-	if character_body.is_spawn_settling():
+func _update_landing_body() -> void:
+	if _landing_body != null and _landing_body.node != null:
+		var to_core := _landing_body.node.global_transform.origin - global_position
+		if to_core.length_squared() > 0.0001:
+			_planet_up = -to_core.normalized()
 		return
+
+	if _gravity_direction.length_squared() > 0.0001:
+		_planet_up = -_gravity_direction.normalized()
+	else:
+		_planet_up = Vector3.UP
+
+func _get_planar_move_direction(state: PhysicsDirectBodyState3D, up: Vector3) -> Vector3:
+	if _motor.length_squared() < 0.001:
+		return Vector3.ZERO
+	var plane := Plane(up.normalized(), 0.0)
+
+	var forward := plane.project(_move_forward)
+	if forward.length_squared() < 0.01:
+		forward = plane.project(-_head.global_transform.basis.z)
+	forward = forward.normalized()
+
+	var right := plane.project(_move_right)
+	if right.length_squared() < 0.01:
+		right = plane.project(state.transform.basis.x)
+	right = right.normalized()
+
+	var move_dir := _motor.x * right + _motor.z * forward
+	if move_dir.length_squared() < 0.001:
+		move_dir = plane.project(state.transform.basis * Vector3(_motor.x, 0.0, -_motor.z))
+	if move_dir.length_squared() < 0.001:
+		return Vector3.ZERO
+	return move_dir.normalized()
+
+
+func _process_undig() -> void:
+	if is_spawn_settling():
+		return
+	_undig_check_counter += 1
+	if _undig_check_counter < undig_check_interval:
+		return
+	_undig_check_counter = 0
 	var solar_system := _get_solar_system()
 	if solar_system == null:
-		# In testing scene?
 		return
 	var landing_body := _get_landing_body()
 	if landing_body == null or landing_body.volume == null:
 		return
 	var volume := landing_body.volume
-	var vt : VoxelToolLodTerrain = volume.get_voxel_tool()
-	var to_local := volume.global_transform.affine_inverse()
-	var local_pos := to_local * character_body.global_transform.origin
+	var vt: VoxelToolLodTerrain = volume.get_voxel_tool()
+	var volume_to_local := volume.global_transform.affine_inverse()
+	var local_pos := volume_to_local * global_transform.origin
 	vt.channel = VoxelBuffer.CHANNEL_SDF
 	var sdf := vt.get_voxel_f_interpolated(local_pos)
-	DDD.set_text("SDF at feet", sdf)
 	if sdf < -0.001:
-		# We got buried, teleport at nearest safe location
 		print("Character is buried, teleporting back to air")
-		var up := local_pos.normalized()
+		var bury_up := local_pos.normalized()
 		var offset_local_pos := local_pos
 		for i in 10:
 			print("Undig attempt ", i)
-			offset_local_pos += 0.2 * up
+			offset_local_pos += 0.2 * bury_up
 			sdf = vt.get_voxel_f_interpolated(offset_local_pos)
 			if sdf > 0.0005:
 				break
-		var gtrans := character_body.global_transform
+		var gtrans := global_transform
 		gtrans.origin = volume.get_global_transform() * offset_local_pos
-		character_body.global_transform = gtrans
-		character_body.velocity = Vector3.ZERO
+		global_transform = gtrans
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
 
 
-func _process_actions():
+func _update_terrain_hover() -> void:
+	_terrain_hover_hit = _raycast_terrain_from_mouse()
+
+
+func _process_action_commands() -> void:
 	if _interact_cmd:
 		_interact_cmd = false
 		_interact()
 
-	var character_body := _get_body()
-	var hit := _raycast_terrain_from_mouse()
+	var hit := _terrain_hover_hit
 	var build_mode := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 
 	if hit.is_empty() or not hit.collider is VoxelLodTerrain:
@@ -127,12 +310,12 @@ func _process_actions():
 
 	_terrain_cursor.show_at(hit.position, hit.normal, build_mode)
 
-	var volume : VoxelLodTerrain = hit.collider
-	var hit_position : Vector3 = hit.position
+	var volume: VoxelLodTerrain = hit.collider
+	var hit_position: Vector3 = hit.position
 
 	if _dig_cmd:
 		_dig_cmd = false
-		var vt : VoxelToolLodTerrain = volume.get_voxel_tool()
+		var vt: VoxelToolLodTerrain = volume.get_voxel_tool()
 		var pos := volume.get_global_transform().affine_inverse() * hit_position
 		var sphere_size := 3.5
 		vt.channel = VoxelBuffer.CHANNEL_SDF
@@ -147,11 +330,11 @@ func _process_actions():
 		for body in bodies:
 			var cmp := SplitChunkRigidBodyComponent.new()
 			body.add_child(cmp)
-		DDD.draw_box_aabb(splitter_aabb, Color(0,1,0), 60)
+		DDD.draw_box_aabb(splitter_aabb, Color(0, 1, 0), 60)
 
 	if _build_cmd:
 		_build_cmd = false
-		var vt : VoxelTool = volume.get_voxel_tool()
+		var vt: VoxelTool = volume.get_voxel_tool()
 		var pos := volume.get_global_transform().affine_inverse() * hit_position
 		vt.channel = VoxelBuffer.CHANNEL_SDF
 		vt.mode = VoxelTool.MODE_ADD
@@ -163,8 +346,8 @@ func _process_actions():
 		var planet := _get_landing_body()
 		if planet == null:
 			return
-		var waypoint : Waypoint = WaypointScene.instantiate()
-		waypoint.transform = Transform3D(character_body.transform.basis, hit_position)
+		var waypoint: Waypoint = WaypointScene.instantiate()
+		waypoint.transform = Transform3D(global_transform.basis, hit_position)
 		planet.node.add_child(waypoint)
 		planet.waypoints.append(waypoint)
 		_audio.play_waypoint()
@@ -180,17 +363,16 @@ func _raycast_terrain_from_mouse() -> Dictionary:
 	var ray_query := PhysicsRayQueryParameters3D.new()
 	ray_query.from = ray_origin
 	ray_query.to = ray_origin + ray_direction * 100.0
-	ray_query.exclude = [_get_body().get_rid()]
-	return _get_body().get_world_3d().direct_space_state.intersect_ray(ray_query)
+	ray_query.exclude = [get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray_query)
 
 
-func _unhandled_input(event: InputEvent):
+func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		if event.pressed and not event.is_echo():
 			match event.keycode:
 				KEY_SPACE:
-					var body := _get_body()
-					body.jump()
+					_jump_cmd = true
 				KEY_E:
 					_interact_cmd = true
 				KEY_F:
@@ -201,7 +383,7 @@ func _unhandled_input(event: InputEvent):
 						_audio.play_light_off()
 				KEY_T:
 					_waypoint_cmd = true
-					
+
 	elif event is InputEventMouseButton:
 		if event.pressed:
 			match event.button_index:
@@ -211,9 +393,8 @@ func _unhandled_input(event: InputEvent):
 					_build_cmd = true
 
 
-func _interact():
-	var character_body := _get_body()
-	var space_state := character_body.get_world_3d().direct_space_state
+func _interact() -> void:
+	var space_state := get_world_3d().direct_space_state
 	var camera := get_viewport().get_camera_3d()
 	var front := -camera.global_transform.basis.z
 	var pos := camera.global_transform.origin
@@ -228,79 +409,127 @@ func _interact():
 
 	if not hit.is_empty():
 		if hit.collider.name == "CommandPanel":
-			var ship : Ship = Util.find_parent_by_type(hit.collider, Ship)
+			var ship: Ship = Util.find_parent_by_type(hit.collider, Ship)
 			if ship != null:
 				_enter_ship(ship)
 
 
-func _enter_ship(ship: Ship):
+func _enter_ship(ship: Ship) -> void:
 	var solar_system := _get_solar_system()
 	if solar_system != null:
 		solar_system.set_character_control_mode(false)
 	var camera = get_viewport().get_camera_3d()
 	camera.set_target(ship)
 	ship.enable_controller()
-	_get_body().queue_free()
+	queue_free()
 
 
-func _process(delta: float):
-	var character_body := _get_body()
-	var gtrans := character_body.global_transform
-	var up := gtrans.basis.y
-
-	_sync_head_to_camera(up)
-
-	# We want to rotate only along local Y
-	var head_basis := _head.global_transform.basis
-	var forward_projected := get_flat_forward_not_normalized(head_basis, up)
-	
-	# Visual can be offset.
-	# We need global transfotm tho cuz look_at wants a global position
-	gtrans.origin = _visual_root.global_transform.origin
-	
-	var old_root_basis := _visual_root.transform.basis.orthonormalized()
-	_visual_root.transform.basis = old_root_basis
-	_visual_root.look_at(gtrans.origin + forward_projected, up)
-	_visual_root.transform.basis = old_root_basis.slerp(_visual_root.transform.basis, delta * 8.0)
-	
-	# TODO Temporarily removed Mannequinny, it did not port well to Godot4
-	#_process_visual_animated(forward, character_body)
-	
-	_visual_head.global_transform.basis = head_basis
+func _update_gravity_direction(state: PhysicsDirectBodyState3D) -> void:
+	if _landing_body != null and _landing_body.node != null:
+		_gravity_direction = (
+			_landing_body.node.global_transform.origin - state.transform.origin
+		).normalized()
+	elif state.total_gravity.length_squared() > 0.0001:
+		_gravity_direction = state.total_gravity.normalized()
+	else:
+		_gravity_direction = Vector3.DOWN
 
 
-func _get_solar_system() -> SolarSystem:
-	var node: Node = get_parent()
-	while node != null:
-		if node is SolarSystem:
-			return node as SolarSystem
-		node = node.get_parent()
-	return null
+func _walk_around_planet(state: PhysicsDirectBodyState3D) -> void:
+	var up := (-_gravity_direction).normalized()
+	if up.length_squared() < 0.0001:
+		return
+	var current_up := state.transform.basis.y.normalized()
+	if current_up.dot(up) > 0.999:
+		return
+	var forward := -state.transform.basis.z
+	forward = (forward - up * forward.dot(up))
+	if forward.length_squared() < 0.001:
+		forward = state.transform.basis.x - up * state.transform.basis.x.dot(up)
+	if forward.length_squared() < 0.001:
+		forward = up.cross(Vector3.FORWARD)
+		if forward.length_squared() < 0.001:
+			forward = up.cross(Vector3.RIGHT)
+	forward = forward.normalized()
+	var right := forward.cross(up).normalized()
+	forward = up.cross(right).normalized()
+	state.transform.basis = Basis(right, up, -forward)
 
 
-func _get_landing_body() -> StellarBody:
-	var solar_system := _get_solar_system()
-	if solar_system == null:
-		return null
-	var character_body := _get_body()
-	var ref_body := solar_system.get_reference_stellar_body()
-	if ref_body.type == StellarBody.TYPE_ROCKY and ref_body.volume != null:
-		return ref_body
-	var closest: StellarBody = null
-	var closest_d := INF
-	for i in solar_system.get_stellar_body_count():
-		var b: StellarBody = solar_system.get_stellar_body(i)
-		if b.type != StellarBody.TYPE_ROCKY or b.volume == null:
-			continue
-		var d := b.node.global_transform.origin.distance_to(character_body.global_position)
-		if d < b.radius * 4.0 and d < closest_d:
-			closest = b
-			closest_d = d
-	return closest
+func _apply_planet_gravity(state: PhysicsDirectBodyState3D) -> void:
+	var gravity_dir := _gravity_direction
+	if gravity_dir.length_squared() < 0.0001:
+		return
+	state.apply_central_force(gravity_dir * _get_gravity_force_magnitude(state))
 
 
-func _get_body() -> OrbitalCharacter:
-	return get_parent() as OrbitalCharacter
+func _get_gravity_force_magnitude(state: PhysicsDirectBodyState3D) -> float:
+	if _landing_body == null or _landing_body.node == null:
+		return max_gravity_force
+	var pull_center := _landing_body.node.global_transform.origin
+	var pos := state.transform.origin
+	var gd := absf(pull_center.distance_to(pos) - _landing_body.radius) + _landing_body.radius
+	var stellar_mass := Util.get_sphere_volume(_landing_body.radius)
+	var f := 0.005 * stellar_mass / (gd * gd)
+	return minf(f, max_gravity_force)
+
+
+func _cancel_velocity_into_ground(state: PhysicsDirectBodyState3D, up: Vector3) -> void:
+	var into_ground := state.linear_velocity.dot(-up)
+	if into_ground > 0.0:
+		state.linear_velocity += up * into_ground
+
+
+func _raycast_to_ground(origin: Vector3, up: Vector3) -> Dictionary:
+	var space_state := get_world_3d().direct_space_state
+	var ray_query := PhysicsRayQueryParameters3D.new()
+	ray_query.from = origin + up * 0.5
+	ray_query.to = origin - up * ground_snap_ray_length
+	ray_query.exclude = [get_rid()]
+	return space_state.intersect_ray(ray_query)
+
+
+func _check_floor(state: PhysicsDirectBodyState3D, up: Vector3) -> bool:
+	for i in state.get_contact_count():
+		var local_normal := state.get_contact_local_normal(i)
+		var world_normal := (state.transform.basis * local_normal).normalized()
+		if world_normal.dot(up) > floor_normal_dot:
+			return true
+	var hit := _raycast_to_ground(state.transform.origin, up)
+	if hit.is_empty():
+		return false
+	return hit.normal.dot(up) > floor_normal_dot and \
+		(hit.position - state.transform.origin).dot(up) < foot_surface_clearance + 0.35
+
+
+func _capture_planet_lock(state: PhysicsDirectBodyState3D, body: StellarBody) -> void:
+	_planet_lock_body = body
+	_planet_lock_local_transform = body.node.global_transform.affine_inverse() * state.transform
+
+
+func _apply_planet_lock(state: PhysicsDirectBodyState3D, body: StellarBody) -> void:
+	state.transform = body.node.global_transform * _planet_lock_local_transform
+	state.linear_velocity = Vector3.ZERO
+	state.angular_velocity = Vector3.ZERO
+	_last_planet_transform = Transform3D.IDENTITY
+
+
+func _apply_planet_motion_delta(state: PhysicsDirectBodyState3D, body: StellarBody) -> void:
+	var planet_tf := body.node.global_transform
+	if _last_planet_transform == Transform3D.IDENTITY:
+		_last_planet_transform = planet_tf
+		return
+	var planet_delta := planet_tf * _last_planet_transform.affine_inverse()
+	state.transform.origin = planet_delta * state.transform.origin
+	state.linear_velocity = planet_delta.basis * state.linear_velocity
+	_last_planet_transform = planet_tf
+
+
+func _clear_planet_lock() -> void:
+	_planet_lock_body = null
+	_planet_lock_local_transform = Transform3D.IDENTITY
+	_was_idle_on_planet = false
+	_last_planet_transform = Transform3D.IDENTITY
 
 
 func _sync_head_to_camera(up: Vector3) -> void:
@@ -316,19 +545,54 @@ func _sync_head_to_camera(up: Vector3) -> void:
 	_head.global_transform = Transform3D(Basis.looking_at(look_dir, up), head_pos)
 
 
-# Gets a vector pointing forwards from the specified basis, projected along the ground plane with specified normal.
-# That vector's direction is unaffected by the vertical angle of the basis relative to the ground plane,
-# so it may be used to orient a character's body based on its head rotation.
-static func get_flat_forward_not_normalized(basis: Basis, ground_up: Vector3) -> Vector3:
+func _get_solar_system() -> SolarSystem:
+	var node: Node = get_parent()
+	while node != null:
+		if node is SolarSystem:
+			return node as SolarSystem
+		node = node.get_parent()
+	return null
+
+
+func _get_landing_body() -> StellarBody:
+	var solar_system := _get_solar_system()
+	if solar_system == null:
+		return null
+	var ref_body := solar_system.get_reference_stellar_body()
+	if ref_body.type == StellarBody.TYPE_ROCKY and ref_body.volume != null:
+		return ref_body
+	var closest: StellarBody = null
+	var closest_d := INF
+	for i in solar_system.get_stellar_body_count():
+		var b: StellarBody = solar_system.get_stellar_body(i)
+		if b.type != StellarBody.TYPE_ROCKY or b.volume == null:
+			continue
+		var d := b.node.global_transform.origin.distance_to(global_position)
+		if d < b.radius * 4.0 and d < closest_d:
+			closest = b
+			closest_d = d
+	return closest
+
+
+static func get_flat_forward_not_normalized(head_basis: Basis, ground_up: Vector3) -> Vector3:
 	var plane := Plane(ground_up, 0)
-	var forward_projected := plane.project(-basis.z)
-	# Godot math functions are very sensitive so we have to handle fallbacks otherwise we get lots of warnings
+	var forward_projected := plane.project(-head_basis.z)
 	if forward_projected.length_squared() < 0.01:
-		if basis.z.dot(ground_up) > 0:
-			# Looking down (z points back)
-			forward_projected = plane.project(basis.y)
+		if head_basis.z.dot(ground_up) > 0:
+			forward_projected = plane.project(head_basis.y)
 		else:
-			# Looking up
-			forward_projected = plane.project(-basis.y)
-	# Output is not normalized because it is not always necessary depending on usage
+			forward_projected = plane.project(-head_basis.y)
 	return forward_projected
+
+
+static func _make_surface_basis(surface_up: Vector3, forward_hint: Vector3) -> Basis:
+	var up := surface_up.normalized()
+	var forward := forward_hint - up * up.dot(forward_hint)
+	if forward.length_squared() < 0.0001:
+		forward = up.cross(Vector3.UP)
+		if forward.length_squared() < 0.0001:
+			forward = up.cross(Vector3.RIGHT)
+	forward = forward.normalized()
+	var right := forward.cross(up).normalized()
+	forward = up.cross(right).normalized()
+	return Basis(right, up, -forward)

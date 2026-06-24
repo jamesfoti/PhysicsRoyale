@@ -531,6 +531,24 @@ static func _configure_instancing_for_planet(body: StellarBody, volume: VoxelLod
 	body.instancer = instancer
 
 
+static func _setup_planet_gravity(body: StellarBody, root: Node3D) -> void:
+	# Tracking volume only — gravity is applied manually on the character/ship.
+	# Point-gravity areas were pulling every RigidBody in a huge sphere and tanking FPS.
+	var area := Area3D.new()
+	area.name = "GravityArea"
+	area.monitorable = false
+
+	var shape := SphereShape3D.new()
+	shape.radius = body.radius * 4.0
+	var collision_shape := CollisionShape3D.new()
+	collision_shape.shape = shape
+	area.add_child(collision_shape)
+
+	area.set_script(load("res://solar_system/planet_gravity_area.gd"))
+	area.stellar_body = body
+	root.add_child(area)
+
+
 static func setup_stellar_body(body: StellarBody, parent: Node,
 	settings: Settings, sun_body: StellarBody = null) -> DirectionalLight3D:
 	var root := Node3D.new()
@@ -545,6 +563,7 @@ static func setup_stellar_body(body: StellarBody, parent: Node,
 	
 	elif body.type == StellarBody.TYPE_ROCKY:
 		_setup_rocky_planet(body, root, settings)
+		_setup_planet_gravity(body, root)
 
 	if body.sea:
 		_setup_sea(body, root)

@@ -24,8 +24,6 @@ func _start_game() -> void:
 	var game_scene : PackedScene = load("res://scenes/game.tscn")
 	_game = game_scene.instantiate()
 	_game.set_settings(_settings)
-	_game.set_settings_ui(_settings_ui)
-	_game.exit_to_menu_requested.connect(_on_game_exit_to_menu_requested)
 	_game.restart_requested.connect(_on_game_restart_requested)
 	add_child(_game)
 
@@ -49,12 +47,6 @@ func _on_MainMenu_settings_requested():
 
 func _on_MainMenu_exit_requested():
 	get_tree().quit()
-
-
-func _on_game_exit_to_menu_requested():
-	_game.queue_free()
-	_game = null
-	_main_menu.show()
 
 
 func _process(delta):

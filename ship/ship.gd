@@ -74,6 +74,7 @@ var _linear_acceleration_superspeed_multiplier := 15.0
 
 
 func _ready():
+	gravity_scale = 0.0
 	# Workaround because these node names can easily be unreliable due to import issues
 	var visual_model_root := _visual_root.get_node("ship")
 	for i in visual_model_root.get_child_count():

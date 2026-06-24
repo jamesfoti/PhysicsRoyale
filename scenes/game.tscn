@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://dx0qy8pg0q72b"]
+[gd_scene load_steps=20 format=3 uid="uid://dx0qy8pg0q72b"]
 
 [ext_resource type="Script" path="res://solar_system/solar_system.gd" id="1_tcbv5"]
 [ext_resource type="Texture2D" uid="uid://b0s3fc7sjnlof" path="res://solar_system/space_background.png" id="2_06f30"]
@@ -16,6 +16,7 @@
 [ext_resource type="Script" path="res://sounds/ambient_sounds.gd" id="13_esoyx"]
 [ext_resource type="AudioStream" uid="uid://pdsd7xlt73p1" path="res://sounds/deep_space.ogg" id="14_krriv"]
 [ext_resource type="PackedScene" path="res://gui/debug_panel/debug_panel.tscn" id="15_debug"]
+[ext_resource type="PackedScene" uid="uid://2n0u3k5i6lwq" path="res://gui/settings/settings_ui.tscn" id="16_settings"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_cmlyd"]
 panorama = ExtResource("2_06f30")
@@ -93,6 +94,14 @@ grow_vertical = 2
 [node name="PlanetHoverSound" type="AudioStreamPlayer" parent="HUD"]
 stream = ExtResource("8_tvaq7")
 
+[node name="SettingsUI" parent="HUD" instance=ExtResource("16_settings")]
+visible = false
+process_mode = 3
+layout_mode = 1
+anchors_preset = 15
+grow_horizontal = 2
+grow_vertical = 2
+
 [node name="DebugPanel" parent="HUD" instance=ExtResource("15_debug")]
 layout_mode = 1
 
@@ -161,7 +170,6 @@ bus = &"SFX"
 
 [connection signal="loading_progressed" from="." to="LoadingScreen" method="_on_GameWorld_loading_progressed"]
 [connection signal="reference_body_changed" from="." to="AmbientSounds" method="_on_GameWorld_reference_body_changed"]
-[connection signal="exit_to_menu_requested" from="PauseMenu" to="." method="_on_PauseMenu_exit_to_menu_requested"]
 [connection signal="exit_to_os_requested" from="PauseMenu" to="." method="_on_PauseMenu_exit_to_os_requested"]
 [connection signal="resume_requested" from="PauseMenu" to="." method="_on_PauseMenu_resume_requested"]
 [connection signal="restart_requested" from="PauseMenu" to="." method="_on_PauseMenu_restart_requested"]

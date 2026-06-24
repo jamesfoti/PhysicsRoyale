@@ -1,6 +1,7 @@
 extends Camera3D
 
 const CameraHints = preload("./camera_hints.gd")
+const CameraOrbit = preload("../character/camera_orbit.gd")
 const Util = preload("../util/util.gd")
 const ReferenceChangeInfo = preload("../solar_system/reference_change_info.gd")
 
@@ -27,6 +28,7 @@ var _max_target_speed := 50.0
 
 var _wait_for_fucking_physics := 0
 var _last_ref_change_info : ReferenceChangeInfo = null
+var _camera_orbit : CameraOrbit = null
 
 
 func _init():
@@ -84,6 +86,10 @@ func set_target(target: Node3D):
 		height_modifier = _default_height_modifier
 		target_height_modifier = _default_target_height_modifier
 		side_offset = _default_side_offset
+
+	_camera_orbit = _find_camera_orbit(_target)
+	if _camera_orbit != null and hints != null:
+		_camera_orbit.initialize_from_hints(hints)
 	
 	var tt := _get_target_transform()
 	_prev_target_pos = tt.origin
@@ -95,6 +101,12 @@ func set_target(target: Node3D):
 
 
 func _get_ideal_transform(target_transform: Transform3D) -> Transform3D:
+	if _camera_orbit != null:
+		return _camera_orbit.compute_orbit_transform(
+			target_transform,
+			target_height_modifier,
+			side_offset,
+			_camera_orbit.get_orbit_distance())
 	var ct := target_transform
 	ct.origin += target_transform.basis * Vector3(
 		side_offset, distance_to_target * height_modifier, distance_to_target)
@@ -118,7 +130,8 @@ func _physics_process(delta: float):
 	var ct := _get_ideal_transform(tt)
 	transform = ct
 	var up := ct.basis.y
-	look_at(tt.origin + target_height_modifier * tt.basis.y + side_offset * tt.basis.x, up)
+	if _camera_orbit == null:
+		look_at(tt.origin + target_height_modifier * tt.basis.y + side_offset * tt.basis.x, up)
 	var ideal_trans := transform
 	var trans := ideal_trans
 	
@@ -150,3 +163,13 @@ func _physics_process(delta: float):
 		_wait_for_fucking_physics -= 1
 		if _wait_for_fucking_physics == 0:
 			_last_ref_change_info = null
+
+
+func _find_camera_orbit(target: Node3D) -> CameraOrbit:
+	var node: Node = target
+	while node != null:
+		var orbit := node.get_node_or_null("CameraOrbit") as CameraOrbit
+		if orbit != null:
+			return orbit
+		node = node.get_parent()
+	return null

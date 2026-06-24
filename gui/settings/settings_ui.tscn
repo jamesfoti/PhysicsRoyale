@@ -16,7 +16,7 @@ script = ExtResource("1_wl3h4")
 
 [node name="PC" type="PanelContainer" parent="."]
 material = SubResource("ShaderMaterial_mxpjy")
-custom_minimum_size = Vector2(600, 350)
+custom_minimum_size = Vector2(600, 420)
 layout_mode = 2
 
 [node name="MC" type="MarginContainer" parent="PC"]
@@ -38,6 +38,46 @@ horizontal_alignment = 1
 [node name="TabContainer" type="TabContainer" parent="PC/MC/VB"]
 layout_mode = 2
 size_flags_vertical = 3
+
+[node name="Controls" type="MarginContainer" parent="PC/MC/VB/TabContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ControlsText" type="RichTextLabel" parent="PC/MC/VB/TabContainer/Controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = true
+text = "[b]General[/b]
+Esc / P — Pause or resume
+Esc — Close settings or menus when open
+
+[b]Ship[/b]
+Mouse — Orient ship (captured)
+W / Z — Forward
+S — Backward
+A / D — Roll left / right
+Space — Up / superspeed (far from planets)
+Shift — Down
+Ctrl — Brake / land
+E — Exit ship (when landed)
+Left click — Dig terrain
+
+[b]On foot[/b]
+W / A / S / D — Move (camera-relative)
+Space — Jump
+Middle mouse drag — Orbit camera
+Scroll wheel — Zoom camera
+Left click — Dig terrain
+Right click — Build terrain
+E — Enter ship (at command panel)
+F — Flashlight
+T — Place waypoint"
 
 [node name="Game" type="MarginContainer" parent="PC/MC/VB/TabContainer"]
 visible = false

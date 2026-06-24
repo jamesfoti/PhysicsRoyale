@@ -76,13 +76,6 @@ offset_top = 122.0
 offset_right = 384.0
 offset_bottom = 138.0
 
-[node name="ExitToMenu" type="Button" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]
-offset_top = 142.0
-offset_right = 384.0
-offset_bottom = 173.0
-size_flags_horizontal = 3
-text = "Exit to menu"
-
 [node name="ExitToOS" type="Button" parent="CC/PanelContainer/MarginContainer/VBoxContainer"]
 offset_top = 177.0
 offset_right = 384.0
@@ -93,5 +86,4 @@ text = "Exit to OS"
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Resume" to="." method="_on_Resume_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Settings" to="." method="_on_Settings_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/Restart" to="." method="_on_Restart_pressed"]
-[connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/ExitToMenu" to="." method="_on_ExitToMenu_pressed"]
 [connection signal="pressed" from="CC/PanelContainer/MarginContainer/VBoxContainer/ExitToOS" to="." method="_on_ExitToOs_pressed"]

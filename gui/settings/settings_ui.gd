@@ -3,6 +3,8 @@ extends CenterContainer
 const Settings = preload("res://settings.gd")
 const Binding = preload("res://binding.gd")
 
+signal closed
+
 @onready var _world_scale_x10_checkbox : CheckBox = \
 	$PC/MC/VB/TabContainer/Game/GC/VBoxContainer/WorldScaleX10
 
@@ -42,7 +44,8 @@ func _ready():
 
 
 func set_settings(s: Settings):
-	assert(_settings == null)
+	if _settings != null:
+		return
 	
 	_settings = s
 	
@@ -73,4 +76,5 @@ func _update_ui():
 
 func _on_Close_pressed():
 	hide()
+	closed.emit()
 

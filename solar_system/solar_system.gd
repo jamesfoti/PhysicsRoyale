@@ -4,6 +4,7 @@ class_name SolarSystem
 const StellarBody = preload("./stellar_body.gd")
 const SolarSystemSetup = preload("./solar_system_setup.gd")
 const Settings = preload("res://settings.gd")
+const SettingsUI = preload("res://gui/settings/settings_ui.gd")
 const MouseCapture = preload("res://gui/mouse_capture.gd")
 const HUD = preload("res://gui/hud.gd")
 const PauseMenu = preload("res://gui/pause_menu/pause_menu.gd")
@@ -22,7 +23,6 @@ const BODY_REFERENCE_EXIT_RADIUS_FACTOR = 3.1 # Must be higher for hysteresis
 
 signal reference_body_changed(info)
 signal loading_progressed(info)
-signal exit_to_menu_requested
 signal restart_requested
 
 
@@ -164,6 +164,8 @@ func _ready():
 	
 	_last_clouds_quality = _settings.clouds_quality
 
+	_init_settings_ui()
+
 
 static func get_gpu_tasks_count() -> int:
 	var stats := VoxelEngine.get_stats()
@@ -176,8 +178,58 @@ func set_settings(s: Settings):
 	_settings = s
 
 
-func set_settings_ui(ui: Control):
+func set_settings_ui(ui: Control) -> void:
+	# Optional override; by default the embedded scene SettingsUI node is used.
 	_settings_ui = ui
+	_connect_settings_ui()
+
+
+func _init_settings_ui() -> void:
+	_resolve_settings_ui()
+	_bind_settings_ui()
+
+
+func _resolve_settings_ui() -> void:
+	if _settings_ui != null:
+		return
+	var embedded := get_node_or_null("HUD/SettingsUI") as Control
+	if embedded != null:
+		_settings_ui = embedded
+
+
+func _bind_settings_ui() -> void:
+	if _settings_ui == null:
+		return
+	if _hud != null and _settings_ui.get_parent() != _hud:
+		_settings_ui.reparent(_hud)
+		_settings_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if _settings_ui.has_method("set_settings"):
+		_settings_ui.set_settings(_settings)
+	_connect_settings_ui()
+
+
+func _connect_settings_ui() -> void:
+	if _settings_ui == null or not _settings_ui is SettingsUI:
+		return
+	var settings_ui := _settings_ui as SettingsUI
+	if not settings_ui.closed.is_connected(_on_settings_ui_closed):
+		settings_ui.closed.connect(_on_settings_ui_closed)
+
+
+func _show_settings_ui() -> void:
+	_resolve_settings_ui()
+	if _settings_ui == null:
+		return
+	_pause_menu.hide()
+	_settings_ui.process_mode = Node.PROCESS_MODE_ALWAYS
+	_settings_ui.show()
+	if _settings_ui.get_parent() != null:
+		_settings_ui.get_parent().move_child(_settings_ui, -1)
+
+
+func _on_settings_ui_closed() -> void:
+	if get_tree().paused:
+		_pause_menu.show()
 
 
 func _input(event: InputEvent):
@@ -240,6 +292,7 @@ func _unhandled_input(event: InputEvent):
 			if event.keycode == KEY_ESCAPE:
 				if _settings_ui != null and _settings_ui.visible:
 					_settings_ui.hide()
+					_on_settings_ui_closed()
 					get_viewport().set_input_as_handled()
 				elif _can_toggle_pause():
 					_toggle_pause_menu()
@@ -551,11 +604,6 @@ func _on_PauseMenu_restart_requested():
 		get_tree().change_scene_to_file(scene_file_path)
 
 
-func _on_PauseMenu_exit_to_menu_requested():
-	_save_world()
-	exit_to_menu_requested.emit()
-
-
 func _on_PauseMenu_exit_to_os_requested():
 	_save_world()
 	get_tree().quit()
@@ -566,9 +614,4 @@ func _on_PauseMenu_resume_requested():
 
 
 func _on_PauseMenu_settings_requested():
-	if _settings_ui != null:
-		_settings_ui.process_mode = Node.PROCESS_MODE_ALWAYS
-		_settings_ui.show()
-		# The settings UI exists before the game is instanced so it might be behind.
-		# This makes sure it shows in front.
-		_settings_ui.move_to_front()
+	_show_settings_ui()
