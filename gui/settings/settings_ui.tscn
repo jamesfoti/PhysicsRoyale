@@ -73,8 +73,7 @@ W / A / S / D — Move (camera-relative)
 Space — Jump
 Middle mouse drag — Orbit camera
 Scroll wheel — Zoom camera
-Left click — Dig terrain
-Right click — Build terrain
+Left click — Edit terrain (mode set in HUD)
 E — Enter ship (at command panel)
 F — Flashlight
 T — Place waypoint"

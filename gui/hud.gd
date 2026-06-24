@@ -4,6 +4,7 @@ const StellarBody = preload("../solar_system/stellar_body.gd")
 const WaypointHUD = preload("../waypoints/waypoint_hud.gd")
 const Util = preload("../util/util.gd")
 const Ship = preload("../ship/ship.gd")
+const TerrainEditUI = preload("res://gui/terrain_edit_ui.gd")
 
 @onready var _solar_system : SolarSystem = get_parent()
 @onready var _target_planet_label : Label = $TargetPlanetLabel
@@ -11,6 +12,7 @@ const Ship = preload("../ship/ship.gd")
 @onready var _waypoint_hud : WaypointHUD = $WaypointHUD
 @onready var _planet_hover_audio_player : AudioStreamPlayer = $PlanetHoverSound
 @onready var _crosshair : Control = $Crosshair
+@onready var _terrain_edit_ui : TerrainEditUI = $TerrainEditUI
 
 var _target_planet_screen_pos := Vector2()
 var _pointed_body : StellarBody = null
@@ -21,6 +23,17 @@ var _ship : Ship = null
 func set_crosshair_visible(show_crosshair: bool) -> void:
 	if _crosshair != null:
 		_crosshair.visible = show_crosshair
+
+
+func set_terrain_edit_visible(show_terrain_edit: bool) -> void:
+	if _terrain_edit_ui != null:
+		_terrain_edit_ui.visible = show_terrain_edit
+
+
+func is_terrain_build_mode() -> bool:
+	if _terrain_edit_ui == null:
+		return false
+	return _terrain_edit_ui.is_build_mode
 
 
 func _ready():

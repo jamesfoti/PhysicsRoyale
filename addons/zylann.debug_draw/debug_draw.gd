@@ -21,6 +21,8 @@ const TEXT_BG_COLOR = Color(0.3, 0.3, 0.3, 0.8)
 ## @brief font size used for debug text
 const TEXT_SIZE = 12
 
+var text_screen_offset := Vector2(8, 8)
+
 # 2D
 
 var _canvas_item : CanvasItem = null
@@ -151,6 +153,12 @@ func set_text(key: String, value=""):
 	}
 
 
+func set_text_screen_offset(offset: Vector2) -> void:
+	text_screen_offset = offset
+	if _canvas_item != null:
+		_canvas_item.position = text_screen_offset
+
+
 func _get_box() -> MeshInstance3D:
 	var mi : MeshInstance3D
 	if len(_box_pool) == 0:
@@ -257,9 +265,10 @@ func _process_canvas():
 	# Update canvas
 	if _canvas_item == null:
 		_canvas_item = Node2D.new()
-		_canvas_item.position = Vector2(8, 8)
+		_canvas_item.position = text_screen_offset
 		_canvas_item.draw.connect(_on_CanvasItem_draw)
 		add_child(_canvas_item)
+	_canvas_item.position = text_screen_offset
 	_canvas_item.queue_redraw()
 
 

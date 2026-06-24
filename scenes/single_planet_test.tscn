@@ -17,6 +17,7 @@
 [ext_resource type="AudioStream" uid="uid://pdsd7xlt73p1" path="res://sounds/deep_space.ogg" id="14_krriv"]
 [ext_resource type="PackedScene" uid="uid://ge77oideg1my" path="res://gui/debug_panel/debug_panel.tscn" id="15_debug"]
 [ext_resource type="PackedScene" uid="uid://2n0u3k5i6lwq" path="res://gui/settings/settings_ui.tscn" id="16_settings"]
+[ext_resource type="PackedScene" uid="uid://c8terraineditui01" path="res://gui/terrain_edit_ui.tscn" id="17_terrain_edit"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_cmlyd"]
 panorama = ExtResource("2_06f30")
@@ -104,6 +105,9 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="DebugPanel" parent="HUD" unique_id=1490390239 instance=ExtResource("15_debug")]
+layout_mode = 1
+
+[node name="TerrainEditUI" parent="HUD" instance=ExtResource("17_terrain_edit")]
 layout_mode = 1
 
 [node name="LensFlare" type="Node" parent="." unique_id=1957437717]

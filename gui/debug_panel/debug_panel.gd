@@ -20,8 +20,20 @@ var _expanded := false
 
 
 func _ready():
+	_toggle_button.focus_mode = Control.FOCUS_NONE
 	_set_expanded(false)
 	_update_toggle_label()
+
+
+func _process(_delta: float) -> void:
+	_update_debug_text_position()
+
+
+func _update_debug_text_position() -> void:
+	if _settings == null or not _settings.show_display_on_screen_debug_overlay:
+		return
+	var rect: Rect2 = $VBox.get_global_rect()
+	DDD.set_text_screen_offset(Vector2(rect.position.x, rect.end.y + 4.0))
 
 
 func set_settings(s: Settings):
@@ -56,6 +68,7 @@ func _set_expanded(expanded: bool):
 	_expanded = expanded
 	_panel.visible = expanded
 	_update_toggle_label()
+	_update_debug_text_position()
 
 	var mouse_capture := _get_mouse_capture()
 	if mouse_capture != null:

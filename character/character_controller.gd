@@ -49,9 +49,8 @@ var _jump_air_frames := 0
 var _floor_grace := 0
 var _on_floor := false
 var _spawn_settle_frames := 0
-var _dig_cmd := false
+var _terrain_edit_cmd := false
 var _interact_cmd := false
-var _build_cmd := false
 var _waypoint_cmd := false
 
 var _planet_lock_local_transform := Transform3D.IDENTITY
@@ -325,7 +324,7 @@ func _process_action_commands() -> void:
 		_interact()
 
 	var hit := _terrain_hover_hit
-	var build_mode := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	var build_mode := _is_terrain_build_mode()
 
 	if hit.is_empty() or not hit.collider is VoxelLodTerrain:
 		_terrain_cursor.hide_cursor()
@@ -336,33 +335,29 @@ func _process_action_commands() -> void:
 	var volume: VoxelLodTerrain = hit.collider
 	var hit_position: Vector3 = hit.position
 
-	if _dig_cmd:
-		_dig_cmd = false
+	if _terrain_edit_cmd:
+		_terrain_edit_cmd = false
 		var vt: VoxelToolLodTerrain = volume.get_voxel_tool()
 		var pos := volume.get_global_transform().affine_inverse() * hit_position
 		var sphere_size := _terrain_cursor.edit_radius
 		vt.channel = VoxelBuffer.CHANNEL_SDF
-		vt.mode = VoxelTool.MODE_REMOVE
-		vt.do_sphere(pos, sphere_size)
-		_audio.play_dig(pos)
+		if build_mode:
+			vt.mode = VoxelTool.MODE_ADD
+			vt.do_sphere(pos, sphere_size)
+			_audio.play_dig(pos)
+		else:
+			vt.mode = VoxelTool.MODE_REMOVE
+			vt.do_sphere(pos, sphere_size)
+			_audio.play_dig(pos)
 
-		var camera := get_viewport().get_camera_3d()
-		var splitter_aabb := AABB(pos, Vector3()).grow(16.0)
-		var bodies := vt.separate_floating_chunks(splitter_aabb, camera.get_parent())
-		print("Created ", len(bodies), " bodies")
-		for body in bodies:
-			var cmp := SplitChunkRigidBodyComponent.new()
-			body.add_child(cmp)
-		DDD.draw_box_aabb(splitter_aabb, Color(0, 1, 0), 60)
-
-	if _build_cmd:
-		_build_cmd = false
-		var vt: VoxelTool = volume.get_voxel_tool()
-		var pos := volume.get_global_transform().affine_inverse() * hit_position
-		vt.channel = VoxelBuffer.CHANNEL_SDF
-		vt.mode = VoxelTool.MODE_ADD
-		vt.do_sphere(pos, _terrain_cursor.edit_radius)
-		_audio.play_dig(pos)
+			var camera := get_viewport().get_camera_3d()
+			var splitter_aabb := AABB(pos, Vector3()).grow(16.0)
+			var bodies := vt.separate_floating_chunks(splitter_aabb, camera.get_parent())
+			print("Created ", len(bodies), " bodies")
+			for body in bodies:
+				var cmp := SplitChunkRigidBodyComponent.new()
+				body.add_child(cmp)
+			DDD.draw_box_aabb(splitter_aabb, Color(0, 1, 0), 60)
 
 	if _waypoint_cmd:
 		_waypoint_cmd = false
@@ -416,9 +411,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			match event.button_index:
 				MOUSE_BUTTON_LEFT:
-					_dig_cmd = true
-				MOUSE_BUTTON_RIGHT:
-					_build_cmd = true
+					_terrain_edit_cmd = true
 
 
 func _interact() -> void:
@@ -601,6 +594,13 @@ func _get_solar_system() -> SolarSystem:
 			return node as SolarSystem
 		node = node.get_parent()
 	return null
+
+
+func _is_terrain_build_mode() -> bool:
+	var solar_system := _get_solar_system()
+	if solar_system == null:
+		return false
+	return solar_system.is_terrain_build_mode()
 
 
 func _get_landing_body() -> StellarBody:

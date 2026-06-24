@@ -57,9 +57,14 @@ func _create_bodies() -> Array[StellarBody]:
 	return SolarSystemSetup.create_solar_system_data(_settings)
 
 
+func is_terrain_build_mode() -> bool:
+	return _hud.is_terrain_build_mode()
+
+
 func set_character_control_mode(on_foot: bool) -> void:
 	_mouse_capture.set_capture_allowed(not on_foot)
 	_hud.set_crosshair_visible(not on_foot)
+	_hud.set_terrain_edit_visible(on_foot)
 	if on_foot:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	else:
