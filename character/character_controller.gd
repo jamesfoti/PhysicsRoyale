@@ -21,6 +21,7 @@ const WaypointScene = preload("../waypoints/waypoint.tscn")
 @export var floor_normal_dot := 0.45
 @export var ground_height_offset := 0.15
 @export var ground_snap_ray_length := 4.0
+@export var edit_distance := 40.0
 @export var undig_check_interval := 15
 @export var up_align_speed := 12.0
 
@@ -339,7 +340,7 @@ func _process_action_commands() -> void:
 		_dig_cmd = false
 		var vt: VoxelToolLodTerrain = volume.get_voxel_tool()
 		var pos := volume.get_global_transform().affine_inverse() * hit_position
-		var sphere_size := 3.5
+		var sphere_size := _terrain_cursor.edit_radius
 		vt.channel = VoxelBuffer.CHANNEL_SDF
 		vt.mode = VoxelTool.MODE_REMOVE
 		vt.do_sphere(pos, sphere_size)
@@ -360,7 +361,7 @@ func _process_action_commands() -> void:
 		var pos := volume.get_global_transform().affine_inverse() * hit_position
 		vt.channel = VoxelBuffer.CHANNEL_SDF
 		vt.mode = VoxelTool.MODE_ADD
-		vt.do_sphere(pos, 3.5)
+		vt.do_sphere(pos, _terrain_cursor.edit_radius)
 		_audio.play_dig(pos)
 
 	if _waypoint_cmd:
@@ -384,9 +385,14 @@ func _raycast_terrain_from_mouse() -> Dictionary:
 	var ray_direction := camera.project_ray_normal(mouse_pos)
 	var ray_query := PhysicsRayQueryParameters3D.new()
 	ray_query.from = ray_origin
-	ray_query.to = ray_origin + ray_direction * 100.0
+	ray_query.to = ray_origin + ray_direction * maxf(edit_distance * 2.0, 50.0)
 	ray_query.exclude = [get_rid()]
-	return get_world_3d().direct_space_state.intersect_ray(ray_query)
+	var hit := get_world_3d().direct_space_state.intersect_ray(ray_query)
+	if hit.is_empty():
+		return {}
+	if global_position.distance_to(hit.position) > edit_distance:
+		return {}
+	return hit
 
 
 func _unhandled_input(event: InputEvent) -> void:
