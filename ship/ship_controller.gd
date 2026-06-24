@@ -8,7 +8,7 @@ const UPRIGHT_DOT_THRESHOLD := 0.75
 const GROUND_RAY_LENGTH := 8.0
 const SPAWN_FORWARD_OFFSET := 5.0
 const SPAWN_LIFT := 2.0
-const FOOT_CLEARANCE := 0.5
+const FOOT_CLEARANCE := 0.15
 
 @onready var _ship : Ship = get_parent()
 @onready var _character_spawn_position_node : Node3D = get_node("../CharacterSpawnPosition")

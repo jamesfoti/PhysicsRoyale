@@ -19,9 +19,15 @@ const WaypointScene = preload("../waypoints/waypoint.tscn")
 @export var jump_impulse := 20.0
 @export var max_gravity_force := 25.0
 @export var floor_normal_dot := 0.45
-@export var foot_surface_clearance := 0.2
+@export var ground_height_offset := 0.15
 @export var ground_snap_ray_length := 4.0
 @export var undig_check_interval := 15
+@export var up_align_speed := 12.0
+
+const FLOOR_GRACE_FRAMES := 5
+const JUMP_BUFFER_FRAMES := 10
+const JUMP_AIR_FRAMES := 12
+
 signal jumped
 
 @onready var _head: Node3D = $Head
@@ -37,7 +43,9 @@ var _move_forward := Vector3.FORWARD
 var _planet_up := Vector3.UP
 var _gravity_direction := Vector3.DOWN
 var _landing_body: StellarBody = null
-var _jump_cmd := false
+var _jump_buffer := 0
+var _jump_air_frames := 0
+var _floor_grace := 0
 var _on_floor := false
 var _spawn_settle_frames := 0
 var _dig_cmd := false
@@ -121,34 +129,52 @@ func _process(_delta: float) -> void:
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_update_gravity_direction(state)
 
-	var up := (-_gravity_direction).normalized()
-	if up.length_squared() < 0.0001:
-		up = _planet_up
+	var planet_up := (-_gravity_direction).normalized()
+	if planet_up.length_squared() < 0.0001:
+		planet_up = _planet_up
 
-	_on_floor = _check_floor(state, up)
+	if _jump_air_frames > 0:
+		_jump_air_frames -= 1
 
-	var move_dir := _get_planar_move_direction(state, up)
+	var has_contact := _has_floor_contact(state, planet_up)
+	if has_contact:
+		_floor_grace = FLOOR_GRACE_FRAMES
+	elif _floor_grace > 0:
+		_floor_grace -= 1
+
+	var near_ground := false
+	if _jump_air_frames == 0:
+		near_ground = _is_near_ground(state, planet_up)
+
+	_on_floor = _jump_air_frames == 0 and (has_contact or _floor_grace > 0 or near_ground)
 	var has_motor_input := _motor.length_squared() > 0.001
+
+	if _landing_body != null and not has_contact:
+		_align_to_planet_up(state, planet_up, state.step)
+
+	var up := state.transform.basis.y.normalized()
+	if up.length_squared() < 0.0001:
+		up = planet_up
+
+	if _jump_buffer > 0 and _on_floor:
+		_clear_planet_lock()
+		state.apply_central_impulse(up * jump_impulse)
+		_jump_buffer = 0
+		_jump_air_frames = JUMP_AIR_FRAMES
+		_floor_grace = 0
+		_on_floor = false
+		jumped.emit()
+	elif _jump_buffer > 0:
+		_jump_buffer -= 1
+
 	var is_idle := _on_floor and not has_motor_input
 
-	if _on_floor and _landing_body != null and _landing_body.node != null and is_idle:
+	if is_idle and _landing_body != null and _landing_body.node != null:
 		if not _was_idle_on_planet or _planet_lock_body != _landing_body:
 			_capture_planet_lock(state, _landing_body)
 		_apply_planet_lock(state, _landing_body)
 		_was_idle_on_planet = true
-		if _jump_cmd:
-			_clear_planet_lock()
-			state.apply_central_impulse(up * jump_impulse)
-			_on_floor = false
-			jumped.emit()
-		_jump_cmd = false
 		return
-
-	if _landing_body != null:
-		_walk_around_planet(state)
-		up = state.transform.basis.y.normalized()
-		if up.length_squared() < 0.0001:
-			up = _planet_up
 
 	_was_idle_on_planet = false
 
@@ -156,9 +182,11 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		if _last_planet_transform == Transform3D.IDENTITY:
 			_last_planet_transform = _landing_body.node.global_transform
 		_apply_planet_motion_delta(state, _landing_body)
-		_cancel_velocity_into_ground(state, up)
+		_flatten_velocity_to_ground(state, planet_up)
+		_maintain_ground_height(state, planet_up)
 
 	if has_motor_input:
+		var move_dir := _get_planar_move_direction(state, planet_up)
 		var force_dir := move_dir
 		if force_dir.length_squared() < 0.001:
 			force_dir = (
@@ -168,18 +196,11 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		if force_dir.length_squared() > 0.001:
 			state.apply_central_force(force_dir.normalized() * move_force)
 
-	if _landing_body != null:
+	if not _on_floor and _landing_body != null:
 		_apply_planet_gravity(state)
 
 	if not _on_floor:
 		_clear_planet_lock()
-
-	if _jump_cmd and _on_floor:
-		_clear_planet_lock()
-		state.apply_central_impulse(up * jump_impulse)
-		_on_floor = false
-		jumped.emit()
-	_jump_cmd = false
 
 
 func _process_visuals(delta: float) -> void:
@@ -187,6 +208,7 @@ func _process_visuals(delta: float) -> void:
 	if up.length_squared() < 0.0001:
 		up = global_transform.basis.y
 	_sync_head_to_camera(up)
+	_visual_root.position = Vector3.ZERO
 
 	# Yaw the visual mesh in local space only — the RigidBody basis already
 	# handles planet alignment; a global look_at on the child was flipping the model.
@@ -372,7 +394,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed and not event.is_echo():
 			match event.keycode:
 				KEY_SPACE:
-					_jump_cmd = true
+					_jump_buffer = JUMP_BUFFER_FRAMES
 				KEY_E:
 					_interact_cmd = true
 				KEY_F:
@@ -435,25 +457,65 @@ func _update_gravity_direction(state: PhysicsDirectBodyState3D) -> void:
 		_gravity_direction = Vector3.DOWN
 
 
-func _walk_around_planet(state: PhysicsDirectBodyState3D) -> void:
-	var up := (-_gravity_direction).normalized()
-	if up.length_squared() < 0.0001:
-		return
+func _align_to_planet_up(
+		state: PhysicsDirectBodyState3D, target_up: Vector3, step: float) -> void:
+	target_up = target_up.normalized()
 	var current_up := state.transform.basis.y.normalized()
-	if current_up.dot(up) > 0.999:
+	if current_up.dot(target_up) > 0.999:
 		return
 	var forward := -state.transform.basis.z
-	forward = (forward - up * forward.dot(up))
+	forward = forward - target_up * forward.dot(target_up)
 	if forward.length_squared() < 0.001:
-		forward = state.transform.basis.x - up * state.transform.basis.x.dot(up)
+		forward = state.transform.basis.x - target_up * state.transform.basis.x.dot(target_up)
 	if forward.length_squared() < 0.001:
-		forward = up.cross(Vector3.FORWARD)
+		forward = target_up.cross(Vector3.FORWARD)
 		if forward.length_squared() < 0.001:
-			forward = up.cross(Vector3.RIGHT)
+			forward = target_up.cross(Vector3.RIGHT)
 	forward = forward.normalized()
-	var right := forward.cross(up).normalized()
-	forward = up.cross(right).normalized()
-	state.transform.basis = Basis(right, up, -forward)
+	var right := forward.cross(target_up).normalized()
+	forward = target_up.cross(right).normalized()
+	var target_basis := Basis(right, target_up, -forward)
+	var current_quat := state.transform.basis.get_rotation_quaternion()
+	var target_quat := target_basis.get_rotation_quaternion()
+	state.transform.basis = Basis(current_quat.slerp(target_quat, up_align_speed * step))
+
+
+func _flatten_velocity_to_ground(state: PhysicsDirectBodyState3D, ground_up: Vector3) -> void:
+	var n := ground_up.normalized()
+	var velocity := state.linear_velocity
+	state.linear_velocity = velocity - n * velocity.dot(n)
+
+
+func _maintain_ground_height(state: PhysicsDirectBodyState3D, up_hint: Vector3) -> void:
+	var hit := _raycast_to_ground(state.transform.origin, up_hint)
+	if hit.is_empty():
+		return
+	var n: Vector3 = hit.normal.normalized()
+	var height: float = (state.transform.origin - hit.position).dot(n)
+	if height < ground_height_offset:
+		state.transform.origin += n * (ground_height_offset - height)
+		var into_ground := state.linear_velocity.dot(n)
+		if into_ground < 0.0:
+			state.linear_velocity -= n * into_ground
+
+
+func _has_floor_contact(state: PhysicsDirectBodyState3D, up: Vector3) -> bool:
+	for i in state.get_contact_count():
+		var local_normal := state.get_contact_local_normal(i)
+		var world_normal := (state.transform.basis * local_normal).normalized()
+		if world_normal.dot(up) > floor_normal_dot:
+			return true
+	return false
+
+
+func _is_near_ground(state: PhysicsDirectBodyState3D, up: Vector3) -> bool:
+	var hit := _raycast_to_ground(state.transform.origin, up)
+	if hit.is_empty():
+		return false
+	var surface_up: Vector3 = hit.normal.normalized()
+	var height_above: float = (state.transform.origin - hit.position).dot(surface_up)
+	return surface_up.dot(up) > floor_normal_dot and \
+		height_above < ground_height_offset + 0.1
 
 
 func _apply_planet_gravity(state: PhysicsDirectBodyState3D) -> void:
@@ -474,12 +536,6 @@ func _get_gravity_force_magnitude(state: PhysicsDirectBodyState3D) -> float:
 	return minf(f, max_gravity_force)
 
 
-func _cancel_velocity_into_ground(state: PhysicsDirectBodyState3D, up: Vector3) -> void:
-	var into_ground := state.linear_velocity.dot(-up)
-	if into_ground > 0.0:
-		state.linear_velocity += up * into_ground
-
-
 func _raycast_to_ground(origin: Vector3, up: Vector3) -> Dictionary:
 	var space_state := get_world_3d().direct_space_state
 	var ray_query := PhysicsRayQueryParameters3D.new()
@@ -487,19 +543,6 @@ func _raycast_to_ground(origin: Vector3, up: Vector3) -> Dictionary:
 	ray_query.to = origin - up * ground_snap_ray_length
 	ray_query.exclude = [get_rid()]
 	return space_state.intersect_ray(ray_query)
-
-
-func _check_floor(state: PhysicsDirectBodyState3D, up: Vector3) -> bool:
-	for i in state.get_contact_count():
-		var local_normal := state.get_contact_local_normal(i)
-		var world_normal := (state.transform.basis * local_normal).normalized()
-		if world_normal.dot(up) > floor_normal_dot:
-			return true
-	var hit := _raycast_to_ground(state.transform.origin, up)
-	if hit.is_empty():
-		return false
-	return hit.normal.dot(up) > floor_normal_dot and \
-		(hit.position - state.transform.origin).dot(up) < foot_surface_clearance + 0.35
 
 
 func _capture_planet_lock(state: PhysicsDirectBodyState3D, body: StellarBody) -> void:
