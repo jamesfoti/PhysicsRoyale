@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3 uid="uid://cepuebvnerpyu"]
+[gd_scene load_steps=9 format=3 uid="uid://cepuebvnerpyu"]
 
 [ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="1"]
 [ext_resource type="Material" path="res://materials/terrain_default.tres" id="2"]
@@ -7,10 +7,12 @@
 [ext_resource type="PackedScene" uid="uid://bqm7planetplayer1" path="res://character/player.tscn" id="6"]
 [ext_resource type="PackedScene" uid="uid://pausemenuterrain01" path="res://scenes/pause_menu.tscn" id="7"]
 [ext_resource type="PackedScene" uid="uid://sunbodyterrain01" path="res://scenes/sun.tscn" id="8"]
+[ext_resource type="Script" path="res://scenes/world_environment_web.gd" id="9"]
 
 [node name="TerrainTest" type="Node3D" unique_id=234830412]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=600744623]
+script = ExtResource("9")
 environment = ExtResource("5")
 
 [node name="Sun" parent="." instance=ExtResource("8")]

@@ -12,12 +12,14 @@ var _sun_radius: float = 8.0
 func configure(sun_radius: float) -> void:
 	_sun_radius = maxf(sun_radius, 1.0)
 	_update_scale()
+	_apply_renderer_tweaks()
 
 
 func _ready() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	_update_scale()
+	_apply_renderer_tweaks()
 
 
 func _process(_delta: float) -> void:
@@ -32,3 +34,14 @@ func _process(_delta: float) -> void:
 func _update_scale() -> void:
 	var diameter: float = _sun_radius * radius_multiplier * 2.0
 	scale = Vector3(diameter, diameter, 1.0)
+
+
+func _apply_renderer_tweaks() -> void:
+	var mat: ShaderMaterial = material_override as ShaderMaterial
+	if mat == null:
+		return
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	if OS.has_feature("web"):
+		mat.render_priority = 1
+		return
+	mat.render_priority = 0

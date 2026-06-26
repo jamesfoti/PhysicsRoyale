@@ -1,17 +1,12 @@
 shader_type sky;
 
-group_uniforms background;
 uniform vec3 space_color : source_color = vec3(0.0, 0.0, 0.008);
-
-group_uniforms stars;
 uniform float star_field_scale : hint_range(8.0, 80.0) = 38.0;
 uniform float star_brightness : hint_range(0.0, 3.0) = 1.15;
 uniform float star_size : hint_range(0.01, 0.2) = 0.055;
 uniform float bright_star_ratio : hint_range(0.0, 0.35) = 0.12;
 uniform float bright_star_boost : hint_range(1.0, 8.0) = 3.2;
 uniform float star_twinkle : hint_range(0.0, 1.0) = 0.35;
-
-group_uniforms distant_lights;
 uniform float nebula_strength : hint_range(0.0, 1.0) = 0.22;
 uniform vec3 nebula_color_a : source_color = vec3(0.12, 0.08, 0.28);
 uniform vec3 nebula_color_b : source_color = vec3(0.22, 0.1, 0.08);
@@ -40,16 +35,15 @@ float star_layer(vec3 eye_dir, float scale, float size, float layer_seed) {
 				vec3 point = hash33(cell + neighbor) - 0.5;
 				float dist = length(neighbor + point - local);
 				float pick = hash11(dot(cell + neighbor, vec3(13.7, 27.3, 41.1)) + layer_seed);
-				if (pick < 0.72) {
-					continue;
+				if (pick >= 0.72) {
+					float twinkle = 1.0;
+					if (star_twinkle > 0.0) {
+						twinkle = 0.75 + 0.25 * sin(TIME * (1.2 + pick * 2.5) + pick * 40.0);
+						twinkle = mix(1.0, twinkle, star_twinkle);
+					}
+					float star = smoothstep(size, 0.0, dist) * twinkle;
+					brightest = max(brightest, star * pick);
 				}
-				float twinkle = 1.0;
-				if (star_twinkle > 0.0) {
-					twinkle = 0.75 + 0.25 * sin(TIME * (1.2 + pick * 2.5) + pick * 40.0);
-					twinkle = mix(1.0, twinkle, star_twinkle);
-				}
-				float star = smoothstep(size, 0.0, dist) * twinkle;
-				brightest = max(brightest, star * pick);
 			}
 		}
 	}

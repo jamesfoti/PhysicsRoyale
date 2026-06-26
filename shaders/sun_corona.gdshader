@@ -1,10 +1,10 @@
 shader_type spatial;
-render_mode unshaded, blend_add, cull_disabled, depth_draw_never;
+render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
 
 uniform vec4 core_color : source_color = vec4(1.0, 0.88, 0.45, 1.0);
 uniform vec4 ray_color : source_color = vec4(1.0, 0.62, 0.12, 1.0);
-uniform float glow_strength : hint_range(0.0, 4.0) = 1.35;
-uniform float ray_strength : hint_range(0.0, 3.0) = 0.95;
+uniform float glow_strength : hint_range(0.0, 6.0) = 1.8;
+uniform float ray_strength : hint_range(0.0, 3.0) = 1.1;
 uniform float ray_count : hint_range(4.0, 36.0) = 16.0;
 uniform float ray_sharpness : hint_range(1.0, 20.0) = 7.0;
 uniform float pulse_speed : hint_range(0.0, 2.0) = 0.3;
@@ -39,6 +39,7 @@ void fragment() {
 	brightness *= smoothstep(1.02, 0.72, dist);
 
 	vec3 color = mix(ray_color.rgb, core_color.rgb, clamp(core * 1.4, 0.0, 1.0));
-	ALBEDO = color * brightness;
-	ALPHA = brightness;
+	float alpha = clamp(brightness, 0.0, 1.0);
+	ALBEDO = color;
+	ALPHA = alpha;
 }
