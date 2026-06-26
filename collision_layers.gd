@@ -1,2 +1,0 @@
-
-const DEFAULT = 1

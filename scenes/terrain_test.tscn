@@ -1,0 +1,86 @@
+[gd_scene load_steps=7 format=3 uid="uid://cepuebvnerpyu"]
+
+[ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="1"]
+[ext_resource type="Material" path="res://materials/terrain_default.tres" id="2"]
+[ext_resource type="Script" uid="uid://jysu1w1r2tv7" path="res://scenes/terrain_hud.gd" id="4"]
+[ext_resource type="Environment" uid="uid://c8gcug836onl0" path="res://materials/terrain_env.tres" id="5"]
+[ext_resource type="PackedScene" uid="uid://bqm7planetplayer1" path="res://character/player.tscn" id="6"]
+[ext_resource type="PackedScene" uid="uid://pausemenuterrain01" path="res://scenes/pause_menu.tscn" id="7"]
+
+[node name="TerrainTest" type="Node3D" unique_id=234830412]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=600744623]
+environment = ExtResource("5")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1865670361]
+transform = Transform3D(0.8660253, -0.35355338, 0.3535538, 0, 0.70710725, 0.7071064, -0.50000024, -0.612372, 0.6123727, 0, 20, -2.48598)
+shadow_enabled = true
+
+[node name="TerrainWorld" type="Node3D" parent="." unique_id=1063690967]
+script = ExtResource("1")
+planet_radius_chunks = 1.5
+noise_seed = 43
+terrain_material = ExtResource("2")
+bounds_falloff_distance = 10.0
+bounds_falloff_strength = 8.0
+planet_caves_enabled = false
+planet_ravine_depth = null
+rebuild_on_ready = true
+auto_rebuild_in_editor = true
+
+[node name="Player" parent="." instance=ExtResource("6")]
+planet = NodePath("../TerrainWorld")
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1801855157]
+script = ExtResource("4")
+
+[node name="Bar" type="HBoxContainer" parent="HUD"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = 40.0
+alignment = 2
+
+[node name="Spacer" type="Control" parent="HUD/Bar"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Anchor" type="VBoxContainer" parent="HUD/Bar"]
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_constants/separation = 4
+
+[node name="ToggleButton" type="Button" parent="HUD/Bar/Anchor"]
+layout_mode = 2
+size_flags_horizontal = 8
+text = "Debug ▼"
+
+[node name="Panel" type="PanelContainer" parent="HUD/Bar/Anchor"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 8
+
+[node name="Margin" type="MarginContainer" parent="HUD/Bar/Anchor/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 6
+
+[node name="Fields" type="VBoxContainer" parent="HUD/Bar/Anchor/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Fps" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Frames Per Second (FPS): --"
+
+[node name="Position" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Player's position: n/a"
+
+[node name="PauseMenu" parent="." instance=ExtResource("7")]
