@@ -5,6 +5,15 @@ A Godot 4.6 technical demo: walk on a procedurally generated spherical planet an
 
 **Play in browser:** https://jamesfoti.github.io/PhysicsRoyale/
 
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Running locally](#running-locally)
+- [Performance](#performance)
+- [Web export](#web-export)
+- [Credits](#credits)
+
 Features
 -----------
 
