@@ -94,5 +94,7 @@ ui_cancel={
 
 [rendering]
 
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.web="gl_compatibility"
 environment/default_clear_color=Color(0, 0, 0, 1)
 environment/default_environment="res://materials/terrain_env.tres"

@@ -402,6 +402,11 @@ func _deferred_rebuild() -> void:
 	rebuild_all()
 
 
+func _use_threaded_rebuild() -> bool:
+	# Web export runs without worker threads unless COOP/COEP headers are enabled.
+	return use_threaded_rebuild and not Engine.is_editor_hint() and not OS.has_feature("web")
+
+
 func _dispatch_pending_rebuilds() -> void:
 	if _pending_rebuild_coords.is_empty():
 		return
@@ -428,7 +433,7 @@ func _dispatch_pending_rebuilds() -> void:
 func _rebuild_coords(coords: Array[Vector3i], rebuild_collision: bool) -> void:
 	if coords.is_empty():
 		return
-	if use_threaded_rebuild and not Engine.is_editor_hint():
+	if _use_threaded_rebuild():
 		for coord: Vector3i in coords:
 			_pending_rebuild_coords[coord] = true
 		if rebuild_collision:
