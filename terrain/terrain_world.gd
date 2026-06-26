@@ -43,6 +43,7 @@ class SettingsSnapshot:
 	var planet_ravine_depth: float = RECOMMENDED_RAVINE_DEPTH
 	var planet_ravine_width: float = RECOMMENDED_RAVINE_WIDTH
 	var terrain_edits: TerrainEdits = null
+	var rebuild_collision: bool = true
 
 
 @export_group("Planet Grid")
@@ -165,12 +166,24 @@ class SettingsSnapshot:
 @export_group("Runtime")
 @export var rebuild_on_ready: bool = true
 @export var auto_rebuild_in_editor: bool = false
+@export var use_threaded_rebuild: bool = true
+@export_range(1, 8, 1) var max_concurrent_rebuild_tasks: int = 4
 
 var _chunks: Dictionary = {}
 var _rebuild_queued := false
 var _planet_ravine_depth: float = RECOMMENDED_RAVINE_DEPTH
 var _planet_ravine_width: float = RECOMMENDED_RAVINE_WIDTH
 var _edits: TerrainEdits = TerrainEdits.new()
+var _dirty_chunks: Dictionary = {}
+var _chunk_flush_pending: bool = false
+var _continuous_edit_depth: int = 0
+var _bake_density: DensitySampler.WorldDensity
+var _pending_rebuild_coords: Dictionary = {}
+var _pending_rebuild_collision: bool = false
+var _async_rebuild_requested: bool = false
+var _async_jobs: Dictionary = {}
+var _running_async_tasks: int = 0
+var _inflight_coords: Dictionary = {}
 
 
 func _ready() -> void:
@@ -178,6 +191,13 @@ func _ready() -> void:
 	add_to_group("terrain_world")
 	if rebuild_on_ready and not Engine.is_editor_hint():
 		rebuild_all()
+
+
+func _process(_delta: float) -> void:
+	_poll_async_rebuilds()
+	if _async_rebuild_requested:
+		_async_rebuild_requested = false
+		_dispatch_pending_rebuilds()
 
 
 func _ensure_export_defaults() -> void:
@@ -195,6 +215,7 @@ func destroy_all() -> void:
 
 
 func rebuild_all() -> void:
+	_invalidate_bake_density()
 	_ensure_export_defaults()
 	_clear_chunks()
 	var settings := _make_settings_snapshot()
@@ -273,10 +294,28 @@ func get_terrain_edits() -> TerrainEdits:
 	return _edits
 
 
+func begin_continuous_edit() -> void:
+	_continuous_edit_depth += 1
+
+
+func end_continuous_edit() -> void:
+	_continuous_edit_depth = maxi(_continuous_edit_depth - 1, 0)
+	if _continuous_edit_depth > 0:
+		return
+	_chunk_flush_pending = false
+	if not _pending_rebuild_coords.is_empty():
+		_dispatch_pending_rebuilds()
+
+
 func apply_brush(world_position: Vector3, radius: float, add_solid: bool) -> void:
-	_edits.add_brush(world_position, radius, add_solid)
+	_edits.set_voxel_size(get_voxel_size())
+	var procedural := Callable(_get_bake_density(), "evaluate")
+	_edits.add_brush(world_position, radius, add_solid, procedural)
 	var coords: Array[Vector3i] = _get_chunk_coords_intersecting_sphere(world_position, radius)
-	_rebuild_chunk_coords(coords)
+	for coord: Vector3i in coords:
+		_pending_rebuild_coords[coord] = true
+	_pending_rebuild_collision = true
+	_dispatch_pending_rebuilds()
 
 
 func get_grid_origin_local() -> Vector3:
@@ -327,6 +366,7 @@ func _make_settings_snapshot() -> SettingsSnapshot:
 	settings.planet_ravine_depth = _planet_ravine_depth
 	settings.planet_ravine_width = _planet_ravine_width
 	settings.terrain_edits = _edits
+	settings.rebuild_collision = settings.generate_collision
 	return settings
 
 
@@ -362,12 +402,185 @@ func _deferred_rebuild() -> void:
 	rebuild_all()
 
 
-func _rebuild_chunk_coords(coords: Array[Vector3i]) -> void:
+func _dispatch_pending_rebuilds() -> void:
+	if _pending_rebuild_coords.is_empty():
+		return
+	var rebuild_collision: bool = _pending_rebuild_collision
+	if rebuild_collision:
+		_pending_rebuild_collision = false
+	var deferred: Array[Vector3i] = []
+	for coord_variant: Variant in _pending_rebuild_coords.keys():
+		var coord: Vector3i = coord_variant as Vector3i
+		if _inflight_coords.has(coord):
+			deferred.append(coord)
+			continue
+		if _running_async_tasks >= max_concurrent_rebuild_tasks:
+			deferred.append(coord)
+			continue
+		_pending_rebuild_coords.erase(coord)
+		_start_single_chunk_async_rebuild(coord, rebuild_collision)
+	for coord: Vector3i in deferred:
+		_pending_rebuild_coords[coord] = true
+	if rebuild_collision and not deferred.is_empty():
+		_pending_rebuild_collision = true
+
+
+func _rebuild_coords(coords: Array[Vector3i], rebuild_collision: bool) -> void:
 	if coords.is_empty():
 		return
+	if use_threaded_rebuild and not Engine.is_editor_hint():
+		for coord: Vector3i in coords:
+			_pending_rebuild_coords[coord] = true
+		if rebuild_collision:
+			_pending_rebuild_collision = true
+		_dispatch_pending_rebuilds()
+	else:
+		var settings := _make_settings_snapshot()
+		settings.rebuild_collision = settings.generate_collision and rebuild_collision
+		_rebuild_chunk_coords(coords, settings)
+
+
+func _start_single_chunk_async_rebuild(coord: Vector3i, rebuild_collision: bool) -> void:
+	_inflight_coords[coord] = true
+	var job := ChunkMeshBuilder.AsyncRebuildJob.new()
+	job.coords = [coord]
+	job.rebuild_collision = rebuild_collision
+	job.settings = _make_thread_settings_snapshot()
+	job.task_id = WorkerThreadPool.add_task(ChunkMeshBuilder.run_async_job.bind(job))
+	_async_jobs[job.task_id] = job
+	_running_async_tasks += 1
+
+
+func _start_async_rebuild(coords: Array[Vector3i], rebuild_collision: bool) -> void:
+	for coord: Vector3i in coords:
+		_pending_rebuild_coords[coord] = true
+	if rebuild_collision:
+		_pending_rebuild_collision = true
+	_dispatch_pending_rebuilds()
+
+
+func _poll_async_rebuilds() -> void:
+	if not _async_jobs.is_empty():
+		var completed: Array[int] = []
+		for task_id_variant: Variant in _async_jobs.keys():
+			var task_id: int = task_id_variant as int
+			if WorkerThreadPool.is_task_completed(task_id):
+				completed.append(task_id)
+		for task_id: int in completed:
+			var job: ChunkMeshBuilder.AsyncRebuildJob = _async_jobs[task_id] as ChunkMeshBuilder.AsyncRebuildJob
+			_async_jobs.erase(task_id)
+			WorkerThreadPool.wait_for_task_completion(task_id)
+			_running_async_tasks = maxi(_running_async_tasks - 1, 0)
+			_apply_async_job(job)
+	if (
+		_running_async_tasks < max_concurrent_rebuild_tasks
+		and not _pending_rebuild_coords.is_empty()
+	):
+		_dispatch_pending_rebuilds()
+
+
+func _apply_async_job(job: ChunkMeshBuilder.AsyncRebuildJob) -> void:
+	for coord: Vector3i in job.coords:
+		_inflight_coords.erase(coord)
+		var chunk: TerrainChunkV2 = _chunks.get(coord) as TerrainChunkV2
+		if chunk == null:
+			continue
+		var build: ChunkMeshBuilder.ChunkBuildResult = (
+			job.batch_result.chunks.get(coord) as ChunkMeshBuilder.ChunkBuildResult
+		)
+		if build == null:
+			continue
+		chunk.apply_build_result(build, generate_collision)
+		if terrain_material != null:
+			chunk.material_override = terrain_material
+
+
+func _make_thread_settings_snapshot() -> SettingsSnapshot:
 	var settings := _make_settings_snapshot()
+	if settings.terrain_edits != null:
+		settings.terrain_edits = settings.terrain_edits.duplicate_for_thread()
+	return settings
+
+
+func _queue_dirty_chunk_rebuild(force_collision: bool) -> void:
+	if _chunk_flush_pending:
+		if force_collision:
+			call_deferred("_flush_dirty_chunks", true)
+		return
+	_chunk_flush_pending = true
+	call_deferred("_flush_dirty_chunks", force_collision)
+
+
+func _flush_dirty_chunks(force_collision: bool) -> void:
+	_chunk_flush_pending = false
+	if _dirty_chunks.is_empty():
+		return
+	var coords: Array[Vector3i] = []
+	for coord_variant: Variant in _dirty_chunks.keys():
+		coords.append(coord_variant as Vector3i)
+	_dirty_chunks.clear()
+	_rebuild_coords(coords, force_collision)
+
+
+func _build_world_density(settings: SettingsSnapshot) -> DensitySampler.WorldDensity:
+	var sphere_world: Vector3 = settings.bounds_center + settings.sphere_center
+	if settings.planet_features_enabled and settings.sphere_enabled:
+		return DensitySampler.create_planet_world_density(
+			sphere_world,
+			settings.sphere_radius,
+			settings.noise_seed,
+			-1.0,
+			-1.0,
+			settings.planet_ravines_enabled,
+			settings.planet_caves_enabled,
+			settings.bounds_center,
+			settings.bounds_half,
+			settings.bounds_falloff_enabled,
+			settings.bounds_falloff_distance,
+			settings.bounds_falloff_strength,
+			settings.bounds_clip_inset,
+			settings.planet_ravine_depth,
+			settings.planet_ravine_width
+		)
+	return DensitySampler.WorldDensity.create(
+		settings.sphere_enabled,
+		sphere_world,
+		settings.sphere_radius,
+		settings.noise_enabled,
+		settings.noise_seed,
+		settings.noise_frequency,
+		settings.noise_amplitude,
+		settings.noise_octaves,
+		settings.noise_lacunarity,
+		settings.noise_gain,
+		settings.bounds_center,
+		settings.bounds_half,
+		settings.bounds_falloff_enabled,
+		settings.bounds_falloff_distance,
+		settings.bounds_falloff_strength,
+		settings.bounds_clip_inset
+	)
+
+
+func _invalidate_bake_density() -> void:
+	_bake_density = null
+
+
+func _get_bake_density() -> DensitySampler.WorldDensity:
+	if _bake_density == null:
+		_bake_density = _build_world_density(_make_settings_snapshot())
+	return _bake_density
+
+
+func _rebuild_chunk_coords(
+	coords: Array[Vector3i],
+	settings: SettingsSnapshot = null
+) -> void:
+	if coords.is_empty():
+		return
+	if settings == null:
+		settings = _make_settings_snapshot()
 	var edge_world_cache: Dictionary = {}
-	var t0 := Time.get_ticks_msec()
 	for coord: Vector3i in coords:
 		var chunk: TerrainChunkV2 = _chunks.get(coord) as TerrainChunkV2
 		if chunk == null:
@@ -375,8 +588,6 @@ func _rebuild_chunk_coords(coords: Array[Vector3i]) -> void:
 		chunk.rebuild(settings, edge_world_cache)
 		if settings.material != null:
 			chunk.material_override = settings.material
-	var elapsed := Time.get_ticks_msec() - t0
-	print("[TerrainWorldV2] Rebuilt ", coords.size(), " chunk(s) after edit in ", elapsed, " ms")
 
 
 func _get_chunk_coords_intersecting_sphere(center: Vector3, radius: float) -> Array[Vector3i]:

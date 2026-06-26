@@ -11,14 +11,16 @@ enum EditMode {
 
 @export var edit_distance: float = 20.0
 @export var brush_radius: float = 1.5
-@export var apply_interval: float = 0.06
+## Seconds between brush stamps while holding LMB.
+@export var stroke_interval: float = 0.05
 
 @onready var _cursor: TerrainEditCursor = $TerrainEditCursor
 
 var _terrain: TerrainWorldV2
 var _mode: EditMode = EditMode.OFF
 var _hover_hit: Dictionary = {}
-var _apply_cooldown: float = 0.0
+var _is_painting: bool = false
+var _stroke_cooldown: float = 0.0
 
 
 func _ready() -> void:
@@ -28,6 +30,9 @@ func _ready() -> void:
 
 
 func set_edit_mode(mode: EditMode) -> void:
+	if mode == EditMode.OFF and _is_painting and _terrain != null:
+		_is_painting = false
+		_terrain.end_continuous_edit()
 	_mode = mode
 	if _mode == EditMode.OFF:
 		_cursor.hide_cursor()
@@ -41,13 +46,16 @@ func _process(delta: float) -> void:
 	if get_tree().paused or _mode == EditMode.OFF:
 		_cursor.hide_cursor()
 		_hover_hit = {}
-		_apply_cooldown = 0.0
+		_stroke_cooldown = 0.0
 		return
 
 	var player: Node = get_parent()
 	if player == null:
 		return
 	if _is_camera_orbiting(player):
+		if _is_painting and _terrain != null:
+			_is_painting = false
+			_terrain.end_continuous_edit()
 		_cursor.hide_cursor()
 		_hover_hit = {}
 		return
@@ -64,16 +72,35 @@ func _process(delta: float) -> void:
 	)
 
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_apply_cooldown = 0.0
-		return
-	if not _can_apply_edit():
+		if _is_painting:
+			_is_painting = false
+			_stroke_cooldown = 0.0
+			if _terrain != null:
+				_terrain.end_continuous_edit()
 		return
 
-	_apply_cooldown -= delta
-	if _apply_cooldown > 0.0:
+	var wants_paint: bool = _can_apply_edit()
+	if wants_paint and not _is_painting:
+		_is_painting = true
+		_stroke_cooldown = 0.0
+		if _terrain != null:
+			_terrain.begin_continuous_edit()
+		_apply_brush()
+		_stroke_cooldown = stroke_interval
+		return
+	elif not wants_paint:
+		if _is_painting:
+			_is_painting = false
+			_stroke_cooldown = 0.0
+			if _terrain != null:
+				_terrain.end_continuous_edit()
+		return
+
+	_stroke_cooldown -= delta
+	if _stroke_cooldown > 0.0:
 		return
 	_apply_brush()
-	_apply_cooldown = apply_interval
+	_stroke_cooldown = stroke_interval
 
 
 func _can_apply_edit() -> bool:
