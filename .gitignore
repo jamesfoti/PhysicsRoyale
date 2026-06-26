@@ -1,5 +1,4 @@
 .godot/
-debug_data/*
 builds/github/*.import
 build/
 tools/godot/
