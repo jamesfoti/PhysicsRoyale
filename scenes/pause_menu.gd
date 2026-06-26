@@ -1,5 +1,5 @@
 extends CanvasLayer
-## Pause overlay: Resume, Controls, Reset, or Quit.
+## Pause overlay: Resume, Controls, Restart, or Quit.
 
 @onready var _panel: PanelContainer = $Panel
 @onready var _main_menu: VBoxContainer = $Panel/Margin/MainMenu

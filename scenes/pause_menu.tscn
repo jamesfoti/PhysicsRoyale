@@ -64,7 +64,7 @@ text = "Controls"
 
 [node name="ResetButton" type="Button" parent="Panel/Margin/MainMenu"]
 layout_mode = 2
-text = "Reset"
+text = "Restart"
 
 [node name="QuitButton" type="Button" parent="Panel/Margin/MainMenu"]
 layout_mode = 2
