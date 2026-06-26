@@ -42,6 +42,7 @@ class SettingsSnapshot:
 	var planet_caves_enabled: bool = true
 	var planet_ravine_depth: float = RECOMMENDED_RAVINE_DEPTH
 	var planet_ravine_width: float = RECOMMENDED_RAVINE_WIDTH
+	var terrain_edits: TerrainEdits = null
 
 
 @export_group("Planet Grid")
@@ -169,6 +170,7 @@ var _chunks: Dictionary = {}
 var _rebuild_queued := false
 var _planet_ravine_depth: float = RECOMMENDED_RAVINE_DEPTH
 var _planet_ravine_width: float = RECOMMENDED_RAVINE_WIDTH
+var _edits: TerrainEdits = TerrainEdits.new()
 
 
 func _ready() -> void:
@@ -267,6 +269,16 @@ func get_settings_snapshot() -> SettingsSnapshot:
 	return _make_settings_snapshot()
 
 
+func get_terrain_edits() -> TerrainEdits:
+	return _edits
+
+
+func apply_brush(world_position: Vector3, radius: float, add_solid: bool) -> void:
+	_edits.add_brush(world_position, radius, add_solid)
+	var coords: Array[Vector3i] = _get_chunk_coords_intersecting_sphere(world_position, radius)
+	_rebuild_chunk_coords(coords)
+
+
 func get_grid_origin_local() -> Vector3:
 	return -get_world_extents() * 0.5
 
@@ -314,6 +326,7 @@ func _make_settings_snapshot() -> SettingsSnapshot:
 	settings.planet_caves_enabled = planet_caves_enabled
 	settings.planet_ravine_depth = _planet_ravine_depth
 	settings.planet_ravine_width = _planet_ravine_width
+	settings.terrain_edits = _edits
 	return settings
 
 
@@ -347,6 +360,55 @@ func _request_rebuild() -> void:
 func _deferred_rebuild() -> void:
 	_rebuild_queued = false
 	rebuild_all()
+
+
+func _rebuild_chunk_coords(coords: Array[Vector3i]) -> void:
+	if coords.is_empty():
+		return
+	var settings := _make_settings_snapshot()
+	var edge_world_cache: Dictionary = {}
+	var t0 := Time.get_ticks_msec()
+	for coord: Vector3i in coords:
+		var chunk: TerrainChunkV2 = _chunks.get(coord) as TerrainChunkV2
+		if chunk == null:
+			continue
+		chunk.rebuild(settings, edge_world_cache)
+		if settings.material != null:
+			chunk.material_override = settings.material
+	var elapsed := Time.get_ticks_msec() - t0
+	print("[TerrainWorldV2] Rebuilt ", coords.size(), " chunk(s) after edit in ", elapsed, " ms")
+
+
+func _get_chunk_coords_intersecting_sphere(center: Vector3, radius: float) -> Array[Vector3i]:
+	var result: Array[Vector3i] = []
+	var settings := _make_settings_snapshot()
+	var padding: float = get_voxel_size() * 2.0
+	var search_aabb := AABB(
+		center - Vector3.ONE * (radius + padding),
+		Vector3.ONE * (radius + padding) * 2.0
+	)
+	for coord_variant: Variant in _chunks.keys():
+		var coord: Vector3i = coord_variant as Vector3i
+		if _get_chunk_world_aabb(coord, settings).intersects(search_aabb):
+			result.append(coord)
+	return result
+
+
+func _get_chunk_world_aabb(coord: Vector3i, settings: SettingsSnapshot) -> AABB:
+	var extent: float = settings.chunk_world_size
+	var corner_local: Vector3 = _chunk_corner_local(coord, settings)
+	var world_corner: Vector3 = global_position + corner_local
+	return AABB(world_corner, Vector3.ONE * extent)
+
+
+func _chunk_corner_local(coord: Vector3i, settings: SettingsSnapshot) -> Vector3:
+	var extent: float = settings.chunk_world_size
+	var grid_origin: Vector3 = (
+		-Vector3(settings.chunks_x, settings.chunks_y, settings.chunks_z)
+		* extent
+		* 0.5
+	)
+	return grid_origin + Vector3(coord) * extent
 
 
 func _register_editor_scene_node(node: Node) -> void:

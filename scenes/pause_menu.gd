@@ -20,8 +20,10 @@ const _CONTROLS_LINES: Array[String] = [
 	"Shift — Run",
 	"E — Wave",
 	"P — Pause menu",
-	"Esc — Free / capture mouse",
+	"Esc — Free / capture mouse (or exit terrain edit)",
 	"F3 — Debug overlay",
+	"T — Cycle terrain edit off / destroy / add",
+	"Hold left click — Apply terrain edit at screen center",
 ]
 
 var _paused: bool = false
@@ -110,4 +112,12 @@ func _resume() -> void:
 	visible = false
 	_show_main_menu()
 	get_tree().paused = false
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_sync_game_mouse_mode()
+
+
+func _sync_game_mouse_mode() -> void:
+	var hud: Node = get_tree().get_first_node_in_group("terrain_hud")
+	if hud != null and hud.has_method("sync_mouse_mode"):
+		hud.call("sync_mouse_mode")
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

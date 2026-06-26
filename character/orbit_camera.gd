@@ -19,6 +19,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if get_tree().paused:
 		return
 	if event.is_action_pressed("ui_cancel"):
+		if _is_terrain_edit_active():
+			return
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		else:
@@ -26,6 +28,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseButton and event.pressed:
+		if get_viewport().gui_get_hovered_control() != null:
+			return
+		if _is_terrain_edit_active():
+			return
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
@@ -55,3 +61,8 @@ func is_orbiting() -> bool:
 
 func recenter_yaw(delta: float) -> void:
 	rotation.y = lerpf(rotation.y, 0.0, minf(1.0, recenter_speed * delta))
+
+
+func _is_terrain_edit_active() -> bool:
+	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
+	return brush != null and brush.get_edit_mode() != TerrainBrush.EditMode.OFF

@@ -68,9 +68,11 @@ func _physics_process(delta: float) -> void:
 	var move_dir: Vector3 = _get_movement_direction()
 	_apply_movement(delta, move_dir)
 
-	var facing: Vector3 = move_dir.normalized() if move_dir.length_squared() > _MIN_DIR_LEN_SQ else _get_flat_forward()
+	var facing: Vector3 = _get_facing_direction(move_dir)
 	if move_dir.length_squared() > _MIN_DIR_LEN_SQ:
-		_orbit_camera.recenter_yaw(delta)
+		var input_fb: float = Input.get_axis("move_backward", "move_forward")
+		if input_fb > _INPUT_DEADZONE:
+			_orbit_camera.recenter_yaw(delta)
 	_align_up_to_planet(delta, facing)
 	move_and_slide()
 	_update_animation(move_dir)
@@ -149,6 +151,18 @@ func _get_movement_direction() -> Vector3:
 	if forward == Vector3.ZERO:
 		return Vector3.ZERO
 	return forward * input_fb
+
+
+func _get_facing_direction(move_dir: Vector3) -> Vector3:
+	if move_dir.length_squared() < _MIN_DIR_LEN_SQ:
+		return _get_flat_forward()
+	# Backpedal: keep facing camera forward so body rotation does not spin the camera.
+	var input_fb: float = Input.get_axis("move_backward", "move_forward")
+	if input_fb < -_INPUT_DEADZONE:
+		var camera_forward: Vector3 = _get_camera_flat_forward()
+		if camera_forward != Vector3.ZERO:
+			return camera_forward
+	return move_dir.normalized()
 
 
 func _align_up_to_planet(delta: float, facing: Vector3) -> void:

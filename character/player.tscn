@@ -1,8 +1,10 @@
-[gd_scene format=3 uid="uid://r24kyistqxpc"]
+[gd_scene load_steps=6 format=3 uid="uid://r24kyistqxpc"]
 
 [ext_resource type="Script" path="res://character/planet_player.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://dmyrflud401tg" path="res://character/godot_plush/godot_plush_skin.tscn" id="2"]
 [ext_resource type="Script" path="res://character/orbit_camera.gd" id="3"]
+[ext_resource type="Script" path="res://character/terrain_brush.gd" id="4"]
+[ext_resource type="Script" path="res://character/terrain_edit_cursor.gd" id="5"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
 radius = 0.35
@@ -13,6 +15,12 @@ floor_stop_on_slope = true
 floor_max_angle = 1.2217305
 floor_snap_length = 0.5
 script = ExtResource("1")
+
+[node name="TerrainBrush" type="Node" parent="."]
+script = ExtResource("4")
+
+[node name="TerrainEditCursor" type="MeshInstance3D" parent="TerrainBrush"]
+script = ExtResource("5")
 
 [node name="VisualRoot" type="Node3D" parent="."]
 unique_name_in_owner = true

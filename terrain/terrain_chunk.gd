@@ -58,6 +58,8 @@ func rebuild(settings: TerrainWorldV2.SettingsSnapshot, edge_world_cache: Dictio
 			settings.bounds_falloff_strength,
 			settings.bounds_clip_inset
 		)
+	if settings.terrain_edits != null:
+		density.terrain_edits = settings.terrain_edits
 	var field := DensitySampler.build_chunk_field(
 		density,
 		sample_size,

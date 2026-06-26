@@ -42,7 +42,15 @@ offset_left = 8.0
 offset_top = 8.0
 offset_right = -8.0
 offset_bottom = 40.0
-alignment = 2
+
+[node name="EditAnchor" type="VBoxContainer" parent="HUD/Bar"]
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_constants/separation = 4
+
+[node name="EditModeButton" type="Button" parent="HUD/Bar/EditAnchor"]
+layout_mode = 2
+text = "Terrain: Off"
 
 [node name="Spacer" type="Control" parent="HUD/Bar"]
 layout_mode = 2
@@ -82,5 +90,9 @@ text = "Frames Per Second (FPS): --"
 [node name="Position" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
 layout_mode = 2
 text = "Player's position: n/a"
+
+[node name="EditMode" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Terrain edit: Off"
 
 [node name="PauseMenu" parent="." instance=ExtResource("7")]
