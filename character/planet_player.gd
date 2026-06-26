@@ -118,7 +118,12 @@ func _get_up() -> Vector3:
 func _get_planet_center() -> Vector3:
 	if _terrain != null:
 		return _terrain.global_position + _terrain.sphere_center
-	return planet.global_position
+	if planet is TerrainWorldV2:
+		var tw: TerrainWorldV2 = planet as TerrainWorldV2
+		return tw.global_position + tw.sphere_center
+	if planet != null:
+		return planet.global_position
+	return Vector3.ZERO
 
 
 func _get_flat_forward() -> Vector3:
@@ -182,7 +187,7 @@ func _align_up_to_planet(delta: float, facing: Vector3) -> void:
 
 func _cache_planet_refs() -> void:
 	if planet == null:
-		planet = get_tree().get_first_node_in_group("terrain_world")
+		planet = get_tree().get_first_node_in_group("planet") as Node3D
 	if planet is TerrainWorldV2:
 		_terrain = planet as TerrainWorldV2
 
@@ -237,6 +242,8 @@ func _find_random_surface_spawn() -> SpawnData:
 	)
 	query.collide_with_areas = false
 	var hit: Dictionary = space.intersect_ray(query)
+	if not hit.is_empty() and not _is_planet_collider(hit.get("collider")):
+		hit = {}
 	if hit.is_empty():
 		spawn.position = center + dir * (radius + spawn_clearance)
 		spawn.up = dir
@@ -250,6 +257,13 @@ func _find_random_surface_spawn() -> SpawnData:
 	spawn.forward = _tangent_forward_on_plane(surface_up)
 	spawn.from_hit = true
 	return spawn
+
+
+func _is_planet_collider(collider: Variant) -> bool:
+	if planet == null or not (collider is Node):
+		return false
+	var node: Node = collider as Node
+	return planet == node or planet.is_ancestor_of(node)
 
 
 func _tangent_forward_on_plane(up: Vector3) -> Vector3:

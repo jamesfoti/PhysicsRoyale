@@ -123,7 +123,7 @@ func _cache_terrain() -> void:
 		if planet is TerrainWorldV2:
 			_terrain = planet as TerrainWorldV2
 			return
-	_terrain = get_tree().get_first_node_in_group("terrain_world") as TerrainWorldV2
+	_terrain = get_tree().get_first_node_in_group("planet") as TerrainWorldV2
 
 
 func _raycast_terrain_from_view(player: Node) -> Dictionary:

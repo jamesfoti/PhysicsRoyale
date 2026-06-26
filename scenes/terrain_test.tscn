@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://cepuebvnerpyu"]
+[gd_scene load_steps=8 format=3 uid="uid://cepuebvnerpyu"]
 
 [ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="1"]
 [ext_resource type="Material" path="res://materials/terrain_default.tres" id="2"]
@@ -6,17 +6,18 @@
 [ext_resource type="Environment" uid="uid://c8gcug836onl0" path="res://materials/terrain_env.tres" id="5"]
 [ext_resource type="PackedScene" uid="uid://bqm7planetplayer1" path="res://character/player.tscn" id="6"]
 [ext_resource type="PackedScene" uid="uid://pausemenuterrain01" path="res://scenes/pause_menu.tscn" id="7"]
+[ext_resource type="PackedScene" uid="uid://sunbodyterrain01" path="res://scenes/sun.tscn" id="8"]
 
 [node name="TerrainTest" type="Node3D" unique_id=234830412]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=600744623]
 environment = ExtResource("5")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1865670361]
-transform = Transform3D(0.8660253, -0.35355338, 0.3535538, 0, 0.70710725, 0.7071064, -0.50000024, -0.612372, 0.6123727, 0, 20, -2.48598)
-shadow_enabled = true
+[node name="Sun" parent="." instance=ExtResource("8")]
+planet_path = NodePath("../TerrainWorld")
 
 [node name="TerrainWorld" type="Node3D" parent="." unique_id=1063690967]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 180, 0, 0)
 script = ExtResource("1")
 planet_radius_chunks = 1.5
 noise_seed = 43

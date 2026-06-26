@@ -1,0 +1,58 @@
+[gd_scene format=3 uid="uid://bnpr1un6n0hoq"]
+
+[ext_resource type="Script" path="res://scenes/sun.gd" id="1"]
+[ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="2"]
+[ext_resource type="Material" path="res://materials/sun_surface.tres" id="3"]
+[ext_resource type="Script" path="res://scenes/sun_corona.gd" id="4"]
+[ext_resource type="Material" path="res://materials/sun_corona.tres" id="5"]
+[ext_resource type="Material" path="res://materials/sun_corona_rays.tres" id="6"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_corona"]
+size = Vector2(1, 1)
+
+[node name="Sun" type="Node3D"]
+script = ExtResource("1")
+planet_path = NodePath("../TerrainWorld")
+
+[node name="TerrainWorld" type="Node3D" parent="."]
+script = ExtResource("2")
+planet_radius_chunks = 1.0
+chunk_size = 8.0
+chunk_resolution = 1
+noise_seed = 17
+noise_frequency = 0.18
+noise_amplitude = 0.4
+noise_octaves = 2
+generate_collision = false
+terrain_material = ExtResource("3")
+bounds_falloff_distance = 5.0
+bounds_falloff_strength = 7.0
+planet_features_enabled = false
+planet_caves_enabled = false
+is_playable_planet = false
+rebuild_on_ready = true
+auto_rebuild_in_editor = true
+
+[node name="CoronaRays" type="MeshInstance3D" parent="."]
+mesh = SubResource("QuadMesh_corona")
+material_override = ExtResource("6")
+cast_shadow = 0
+gi_mode = 0
+script = ExtResource("4")
+radius_multiplier = 5.8
+
+[node name="Corona" type="MeshInstance3D" parent="."]
+mesh = SubResource("QuadMesh_corona")
+material_override = ExtResource("5")
+cast_shadow = 0
+gi_mode = 0
+script = ExtResource("4")
+radius_multiplier = 3.4
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+light_color = Color(1, 0.94, 0.82, 1)
+light_energy = 1.25
+shadow_enabled = true
+directional_shadow_mode = 1
+sky_mode = 1

@@ -164,6 +164,8 @@ class SettingsSnapshot:
 		_request_rebuild()
 
 @export_group("Runtime")
+## When false (e.g. decorative sun mesh), this world is excluded from spawn and editing queries.
+@export var is_playable_planet: bool = true
 @export var rebuild_on_ready: bool = true
 @export var auto_rebuild_in_editor: bool = false
 @export var use_threaded_rebuild: bool = true
@@ -188,7 +190,9 @@ var _inflight_coords: Dictionary = {}
 
 func _ready() -> void:
 	_ensure_export_defaults()
-	add_to_group("terrain_world")
+	if is_playable_planet:
+		add_to_group("terrain_world")
+		add_to_group("planet")
 	if rebuild_on_ready and not Engine.is_editor_hint():
 		rebuild_all()
 

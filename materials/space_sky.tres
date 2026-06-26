@@ -1,0 +1,17 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/space_sky.gdshader" id="1"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/space_color = Color(0, 0, 0.02, 1)
+shader_parameter/star_field_scale = 38.0
+shader_parameter/star_brightness = 1.15
+shader_parameter/star_size = 0.055
+shader_parameter/bright_star_ratio = 0.12
+shader_parameter/bright_star_boost = 3.2
+shader_parameter/star_twinkle = 0.35
+shader_parameter/nebula_strength = 0.22
+shader_parameter/nebula_color_a = Color(0.12, 0.08, 0.28, 1)
+shader_parameter/nebula_color_b = Color(0.22, 0.1, 0.08, 1)
+shader_parameter/glow_strength = 0.55
