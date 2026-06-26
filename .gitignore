@@ -1,6 +1,5 @@
 .godot/
 debug_data/*
-docs/*.import
+builds/github/*.import
 build/
-PhysicsRoyale-web.zip
 tools/godot/

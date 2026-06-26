@@ -1,13 +1,16 @@
-# Zip the web build in docs/ for itch.io upload (HTML at zip root).
+# Zip the builds/github export for itch.io (index.html at zip root).
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$ExportDir = Join-Path $ProjectRoot "docs"
+$ExportDir = Join-Path $ProjectRoot "builds\github"
 $ExportHtml = Join-Path $ExportDir "index.html"
-$OutZip = Join-Path $ProjectRoot "PhysicsRoyale-web.zip"
+$ItchDir = Join-Path $ProjectRoot "builds\itch"
+$OutZip = Join-Path $ItchDir "PhysicsRoyale-web.zip"
 
 if (-not (Test-Path $ExportHtml)) {
-	throw "Missing $ExportHtml — run tools/export_web.ps1 first."
+	throw "Missing $ExportHtml - run tools/export_web.ps1 first."
 }
+
+New-Item -ItemType Directory -Force -Path $ItchDir | Out-Null
 
 $staging = Join-Path $env:TEMP "PhysicsRoyale-web-itch"
 if (Test-Path $staging) {
@@ -15,7 +18,9 @@ if (Test-Path $staging) {
 }
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
-Get-ChildItem -Path $ExportDir -File | Where-Object { $_.Extension -ne ".import" } | ForEach-Object {
+Get-ChildItem -Path $ExportDir -File | Where-Object {
+	$_.Name -ne ".nojekyll" -and $_.Extension -ne ".import"
+} | ForEach-Object {
 	Copy-Item -Path $_.FullName -Destination $staging
 }
 

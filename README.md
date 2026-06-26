@@ -41,9 +41,10 @@ The web build is heavier: WASM download (~54 MB on first load), main-thread mesh
 Web export
 --------------
 
-The committed build lives in `docs/` for GitHub Pages.
+- `builds/github/` — static site deployed to GitHub Pages
+- `builds/itch/PhysicsRoyale-web.zip` — browser build for itch.io upload
 
-**Rebuild:**
+**Rebuild (GitHub Pages + itch zip):**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/export_web.ps1
@@ -57,19 +58,19 @@ powershell -ExecutionPolicy Bypass -File tools/export_web.ps1 -Serve
 
 Then open http://127.0.0.1:8060/
 
-**GitHub Pages:** Repo Settings → Pages → deploy from branch `master`, folder `/docs`.
+**GitHub Pages:** Repo Settings → Pages → Source: **GitHub Actions** (workflow deploys `builds/github/` on push).
 
-**itch.io:** Package the same build for upload:
+**itch.io:** Upload `builds/itch/PhysicsRoyale-web.zip` as an HTML project with “Played in browser” enabled.
+
+To rebuild only the itch zip from an existing `builds/github/` build:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/package_itch.ps1
 ```
-
-Upload `PhysicsRoyale-web.zip` as an HTML project with “Played in browser” enabled.
 
 Credits
 --------------
 
 Textures from https://ambientcg.com/  
 Sound effects partly from https://sonniss.com/gameaudiogdc  
-Godot Plush character assets included under `character/godot_plush/`
+Godot Plush character by [Tibo](https://gtibo.itch.io/godot-plush-character) (MIT; assets in `character/godot_plush/`)
