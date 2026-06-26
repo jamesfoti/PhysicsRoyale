@@ -1,68 +1,75 @@
 PhysicsRoyale
 =======================
 
-This is a 3D space game demo, with procedurally-generated planets. It is a technical demo for one use of the [Voxel Tools module](https://github.com/Zylann/godot_voxel) and Godot 4.
+A Godot 4.6 technical demo: walk on a procedurally generated spherical planet and paint terrain in real time. Terrain is pure GDScript (density field + Flying Edges mesher + chunked rebuilds) with no Voxel Tools dependency.
 
-[![Video](https://img.youtube.com/vi/8OrZX347MoE/0.jpg)](https://www.youtube.com/watch?v=8OrZX347MoE)
+**Play in browser:** https://jamesfoti.github.io/PhysicsRoyale/
 
 Features
 -----------
 
-- Procedurally-generated planets and moon (1 to 2 Km in radius, or 10 to 20 Km in large scale mode)
-- Deterministic, non-realistic celestial motion at all times
-- Simple atmospheres
-- Fully editable terrain using voxels
-- Persistent changes with save files per planet
-- Ravines
-- Cave systems deep underground (not easy to reach, most entries are in ravines)
-- Spaceship flight from ground to space
-- Motion trails
-- Sound effects and ambiances
-- Origin shifting allowing the whole system to be around 50Km in size (takes place only once when close enough to a planet)
-- Third-person character
-- Simple environment props such as rocks and grass
-- Basic waypoint system to pin locations
-- Main menu and in-game menu with settings
-- Option to increase the scale of planets x10 (physics is buggy on planets, maybe unless you use a double-precision Godot build)
-- Lens flares from [SIsilicon](https://github.com/SIsilicon/Godot-Lens-Flare-Plugin), ported to Godot 4 for the demo
+- Spherical procedural terrain with noise, ravines, and caves
+- Chunked mesh generation with threaded rebuilds on desktop
+- Hold-to-paint terrain editing (destroy / add modes)
+- Godot Plush third-person character with orbit camera
+- Debug HUD (FPS, position, edit mode)
+- Pause menu with controls reference
+- Web export for GitHub Pages and itch.io
 
-Note:
-This is a demo project, so any lack of gameplay, placeholders or absence of roadmap is intentional. It is meant to showcase an example of how to start making a game like this. There is no plan to make it a fully-fledged space game, but bug-fixes or small improvements may be welcome.
+Note: This is a demo project. Gameplay is minimal by design; the focus is terrain generation and editing. In-game controls are listed in the pause menu.
 
-Textures are from https://ambientcg.com/  
-Sound effects are partly from https://sonniss.com/gameaudiogdc
+Requirements
+--------------
 
+- [Godot 4.6](https://godotengine.org/) (standard build; no custom modules)
+- Desktop: Forward+ renderer (default)
+- Web: GL Compatibility (configured automatically for web export)
+
+Running locally
+---------------
+
+1. Open the project in Godot 4.6.
+2. Run the main scene: `scenes/terrain_test.tscn`.
 
 Performance
 -------------
 
-You need a computer with a powerful CPU to run this. By default, Vulkan is required, but it might work in GLES3 if you turn off Vulkan-only features like GPU detail rendering.
-For reference, with an AMD Ryzen 5 2600 6-core CPU, an nVidia GeForce GTX 1060 6Gb graphics card and an optimized Godot build, this demo starts up in 5 seconds, uses about 1 Gb of RAM and should mostly sustain 60 FPS.
+On desktop, terrain meshing runs on worker threads while you paint; expect ~60 FPS on a mid-range PC.
 
+The web build is heavier: WASM download (~54 MB on first load), main-thread meshing, and lower FPS than native—especially while editing terrain.
 
-Controls
-----------
-
-In spaceship mode:
-- The mouse orientates the ship
-- A and D rolls left or right
-- W goes forward
-- S goes backward
-- Spacebar activates super-speed. Only works when far enough from a planet.
-- E to jump off the ship. Only works when properly landed on the ground.
-
-In character mode:
-- Mouse to orientate the head and camera
-- Left Mouse Button to dig
-- Right Mouse Button to place blobs of ground (WARNING, there is no check if you dig yourself in)
-- W,A,S,D to move
-- Spacebar to jump
-- F to toggle flashlight
-- T to place a waypoint
-
-
-Dependencies
+Web export
 --------------
 
-You need to use a custom version of [Godot Engine](https://godotengine.org/) including the [Voxel Tools](https://github.com/Zylann/godot_voxel) module. See how to get one here: https://voxel-tools.readthedocs.io/en/latest/getting_the_module/
+The committed build lives in `docs/` for GitHub Pages.
 
+**Rebuild:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/export_web.ps1
+```
+
+**Test locally:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/export_web.ps1 -Serve
+```
+
+Then open http://127.0.0.1:8060/
+
+**GitHub Pages:** Repo Settings → Pages → deploy from branch `master`, folder `/docs`.
+
+**itch.io:** Package the same build for upload:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/package_itch.ps1
+```
+
+Upload `PhysicsRoyale-web.zip` as an HTML project with “Played in browser” enabled.
+
+Credits
+--------------
+
+Textures from https://ambientcg.com/  
+Sound effects partly from https://sonniss.com/gameaudiogdc  
+Godot Plush character assets included under `character/godot_plush/`
