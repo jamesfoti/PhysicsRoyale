@@ -21,7 +21,8 @@ func _ready() -> void:
 func _apply_web_material() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(0.35, 0.68, 0.95, 1.0)
+	mat.albedo_texture = preload("res://character/godot_plush/material/godot_plush_albedo.png")
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	godot_plush_mesh.material_override = mat
 
 func _set_ragdoll(value : bool) -> void:

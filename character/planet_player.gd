@@ -355,7 +355,11 @@ func _set_terrain_focus(enabled: bool) -> void:
 	velocity = Vector3.ZERO
 	_want_jump = false
 	if _terrain_focus:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
+		if OS.has_feature("web"):
+			# Browsers do not support confined-hidden mode; visible keeps get_mouse_position() accurate.
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		else:
+			Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
 	else:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
