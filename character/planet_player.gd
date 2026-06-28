@@ -49,6 +49,7 @@ func exit_terrain_focus() -> void:
 func _ready() -> void:
 	_cache_planet_refs()
 	call_deferred("_spawn_on_planet")
+	call_deferred("_connect_terrain_hud")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -68,6 +69,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_want_jump = true
 	if event.is_action_pressed("wave") and is_on_floor() and not _get_skin().is_waving():
 		_get_skin().wave()
+	if event.is_action_pressed("item_menu"):
+		_toggle_item_menu()
+		get_viewport().set_input_as_handled()
 
 
 func _input(event: InputEvent) -> void:
@@ -367,3 +371,82 @@ func _set_terrain_focus(enabled: bool) -> void:
 func _is_terrain_edit_active() -> bool:
 	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
 	return brush != null and brush.get_edit_mode() != TerrainBrush.EditMode.OFF
+
+
+func _connect_terrain_hud() -> void:
+	var hud: CanvasLayer = get_tree().get_first_node_in_group("terrain_hud") as CanvasLayer
+	if hud == null:
+		return
+	if hud.has_signal("terrain_edit_mode_changed"):
+		hud.terrain_edit_mode_changed.connect(_on_terrain_edit_mode_changed)
+	if hud.has_method("get_item_menu"):
+		var item_menu: PlayerItemMenu = hud.get_item_menu()
+		if item_menu != null:
+			item_menu.item_selected.connect(apply_hand_item)
+	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
+	if brush != null:
+		_on_terrain_edit_mode_changed(brush.get_edit_mode())
+	var skin: PLUSH_SKIN = _get_skin()
+	if skin != null:
+		skin.torch_equipped_changed.connect(_on_torch_equipped_changed)
+
+
+func apply_hand_item(item: PlayerItems.Item) -> void:
+	if not _spawned:
+		return
+	var skin: PLUSH_SKIN = _get_skin()
+	if skin.is_torch_busy() or skin.is_pickaxe_busy():
+		return
+	var hud: CanvasLayer = get_tree().get_first_node_in_group("terrain_hud") as CanvasLayer
+	match item:
+		PlayerItems.Item.NONE:
+			if skin.is_torch_equipped():
+				skin.stow_torch()
+			if hud != null and hud.has_method("set_edit_mode"):
+				hud.set_edit_mode(TerrainBrush.EditMode.OFF)
+		PlayerItems.Item.TORCH:
+			if hud != null and hud.has_method("set_edit_mode"):
+				hud.set_edit_mode(TerrainBrush.EditMode.OFF)
+			if not skin.is_torch_equipped():
+				skin.equip_torch()
+		PlayerItems.Item.PICKAXE_DESTROY, PlayerItems.Item.PICKAXE_ADD:
+			if skin.is_torch_equipped():
+				skin.stow_torch()
+			if hud != null and hud.has_method("set_edit_mode"):
+				hud.set_edit_mode(PlayerItems.edit_mode_from_item(item))
+	_sync_item_menu(item)
+
+
+func _toggle_item_menu() -> void:
+	if get_tree().paused:
+		return
+	var hud: CanvasLayer = get_tree().get_first_node_in_group("terrain_hud") as CanvasLayer
+	if hud == null or not hud.has_method("get_item_menu"):
+		return
+	var item_menu: PlayerItemMenu = hud.get_item_menu()
+	if item_menu != null:
+		item_menu.toggle_menu()
+
+
+func _sync_item_menu(item: PlayerItems.Item) -> void:
+	var hud: CanvasLayer = get_tree().get_first_node_in_group("terrain_hud") as CanvasLayer
+	if hud == null or not hud.has_method("get_item_menu"):
+		return
+	var item_menu: PlayerItemMenu = hud.get_item_menu()
+	if item_menu != null:
+		item_menu.set_active_item(item)
+
+
+func _on_torch_equipped_changed(equipped: bool) -> void:
+	if equipped:
+		_sync_item_menu(PlayerItems.Item.TORCH)
+	elif not _is_terrain_edit_active():
+		_sync_item_menu(PlayerItems.Item.NONE)
+
+
+func _on_terrain_edit_mode_changed(mode: TerrainBrush.EditMode) -> void:
+	_get_skin().set_terrain_edit_equipped(mode != TerrainBrush.EditMode.OFF)
+	if mode != TerrainBrush.EditMode.OFF:
+		_sync_item_menu(PlayerItems.item_from_edit_mode(mode))
+	elif not _get_skin().is_torch_equipped():
+		_sync_item_menu(PlayerItems.Item.NONE)

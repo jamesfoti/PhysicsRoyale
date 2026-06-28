@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://duluvnttoktvg"]
+
+[ext_resource type="PackedScene" path="res://props/pickaxe.glb" id="1"]
+[ext_resource type="Script" path="res://props/pickaxe.gd" id="2"]
+
+[node name="Pickaxe" type="Node3D"]
+script = ExtResource("2")
+
+[node name="pickaxe" parent="." instance=ExtResource("1")]

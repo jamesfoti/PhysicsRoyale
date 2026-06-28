@@ -1,18 +1,22 @@
 extends SpringArm3D
 class_name OrbitCamera
-## Camera pitch while playing; hold middle mouse to orbit around the player.
+## Camera pitch while playing; hold middle mouse to orbit; scroll to zoom.
 
 
 @export_range(-90.0, 90.0, 0.1, "radians") var min_limit_x: float = -1.4
 @export_range(-90.0, 90.0, 0.1, "radians") var max_limit_x: float = 0.2
 @export var mouse_sensitivity: float = 0.0025
 @export var recenter_speed: float = 10.0
+@export var min_spring_length: float = 2.5
+@export var max_spring_length: float = 14.0
+@export var scroll_zoom_step: float = 0.65
 
 var _orbiting: bool = false
 
 
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	spring_length = clampf(spring_length, min_spring_length, max_spring_length)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -34,6 +38,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if _is_terrain_edit_active():
 			return
+		var button: InputEventMouseButton = event as InputEventMouseButton
+		if button.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			_apply_scroll_zoom(button.button_index)
+			get_viewport().set_input_as_handled()
+			return
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
@@ -47,6 +56,8 @@ func _input(event: InputEvent) -> void:
 		var button: InputEventMouseButton = event as InputEventMouseButton
 		if button.button_index == MOUSE_BUTTON_MIDDLE:
 			_orbiting = button.pressed
+		elif button.pressed:
+			_apply_scroll_zoom(button.button_index)
 
 	if event is InputEventMouseMotion:
 		var motion: InputEventMouseMotion = event as InputEventMouseMotion
@@ -61,6 +72,22 @@ func _input(event: InputEvent) -> void:
 
 func is_orbiting() -> bool:
 	return _orbiting
+
+
+func _apply_scroll_zoom(button_index: MouseButton) -> void:
+	var direction: float = 0.0
+	match button_index:
+		MOUSE_BUTTON_WHEEL_UP:
+			direction = -1.0
+		MOUSE_BUTTON_WHEEL_DOWN:
+			direction = 1.0
+		_:
+			return
+	spring_length = clampf(
+		spring_length + direction * scroll_zoom_step,
+		min_spring_length,
+		max_spring_length
+	)
 
 
 func recenter_yaw(delta: float) -> void:

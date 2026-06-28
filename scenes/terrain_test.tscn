@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://cepuebvnerpyu"]
+[gd_scene load_steps=10 format=3 uid="uid://cepuebvnerpyu"]
 
 [ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="1"]
 [ext_resource type="Material" path="res://materials/terrain_default.tres" id="2"]
@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://pausemenuterrain01" path="res://scenes/pause_menu.tscn" id="7"]
 [ext_resource type="PackedScene" uid="uid://sunbodyterrain01" path="res://scenes/sun.tscn" id="8"]
 [ext_resource type="Script" path="res://scenes/world_environment_web.gd" id="9"]
+[ext_resource type="PackedScene" path="res://gui/player_item_menu.tscn" id="10"]
 
 [node name="TerrainTest" type="Node3D" unique_id=234830412]
 
@@ -46,14 +47,13 @@ offset_top = 8.0
 offset_right = -8.0
 offset_bottom = 40.0
 
-[node name="EditAnchor" type="VBoxContainer" parent="HUD/Bar"]
+[node name="ItemAnchor" type="VBoxContainer" parent="HUD/Bar"]
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_constants/separation = 4
 
-[node name="EditModeButton" type="Button" parent="HUD/Bar/EditAnchor"]
+[node name="PlayerItemMenu" parent="HUD/Bar/ItemAnchor" instance=ExtResource("10")]
 layout_mode = 2
-text = "Terrain: Off"
 
 [node name="Spacer" type="Control" parent="HUD/Bar"]
 layout_mode = 2

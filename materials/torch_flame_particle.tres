@@ -1,0 +1,10 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/torch_flame_particle.gdshader" id="1"]
+
+[resource]
+render_priority = 1
+shader = ExtResource("1")
+shader_parameter/color_hot = Color(1, 0.92, 0.55, 1)
+shader_parameter/color_cool = Color(1, 0.38, 0.06, 1)
+shader_parameter/flicker_speed = 12.0
