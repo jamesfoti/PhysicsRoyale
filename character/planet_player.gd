@@ -8,6 +8,7 @@ const _INPUT_DEADZONE: float = 0.01
 const _SPAWN_ATTEMPTS: int = 12
 const _SPAWN_RAY_MARGIN: float = 40.0
 const _FALLBACK_PLANET_RADIUS: float = 18.0
+const _MAX_MOUSE_DELTA: float = 80.0
 
 class SpawnData:
 	var position: Vector3 = Vector3.ZERO
@@ -34,6 +35,15 @@ var _terrain: TerrainWorldV2
 var _anim_state: String = ""
 var _want_jump: bool = false
 var _spawned: bool = false
+var _terrain_focus: bool = false
+
+
+func is_terrain_focus_active() -> bool:
+	return _terrain_focus
+
+
+func exit_terrain_focus() -> void:
+	_set_terrain_focus(false)
 
 
 func _ready() -> void:
@@ -42,6 +52,18 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if get_tree().paused:
+		return
+	if _terrain_focus and event.is_action_pressed("ui_cancel"):
+		_set_terrain_focus(false)
+		get_viewport().set_input_as_handled()
+		return
+	if event.is_action_pressed("terrain_focus"):
+		if not _terrain_focus and not _is_terrain_edit_active():
+			return
+		_set_terrain_focus(not _terrain_focus)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("jump"):
 		_want_jump = true
 	if event.is_action_pressed("wave") and is_on_floor() and not _get_skin().is_waving():
@@ -49,7 +71,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not _spawned or Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
+	if not _spawned or _terrain_focus:
+		return
+	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		return
 	if _is_camera_orbiting():
 		return
@@ -65,6 +89,15 @@ func _physics_process(delta: float) -> void:
 	_update_gravity_direction()
 	up_direction = _get_up()
 
+	if _terrain_focus:
+		_want_jump = false
+		_apply_focus_physics(delta)
+		var focus_facing: Vector3 = _get_flat_forward()
+		_align_up_to_planet(delta, focus_facing)
+		move_and_slide()
+		_update_animation(Vector3.ZERO)
+		return
+
 	var move_dir: Vector3 = _get_movement_direction()
 	_apply_movement(delta, move_dir)
 
@@ -73,7 +106,9 @@ func _physics_process(delta: float) -> void:
 		var input_fb: float = Input.get_axis("move_backward", "move_forward")
 		if input_fb > _INPUT_DEADZONE:
 			_orbit_camera.recenter_yaw(delta)
-	_align_up_to_planet(delta, facing)
+		_align_up_to_planet(delta, facing)
+	elif not _is_camera_orbiting():
+		_orthonormalize_basis()
 	move_and_slide()
 	_update_animation(move_dir)
 
@@ -95,7 +130,18 @@ func _apply_movement(delta: float, move_dir: Vector3) -> void:
 	_want_jump = false
 
 
+func _apply_focus_physics(delta: float) -> void:
+	var radial_speed: float = velocity.dot(_gravity_direction)
+	if is_on_floor():
+		velocity = Vector3.ZERO
+	else:
+		velocity = _gravity_direction * radial_speed
+		velocity += _gravity_direction * gravity_strength * delta
+
+
 func _apply_mouse_yaw(mouse_dx: float) -> void:
+	if absf(mouse_dx) > _MAX_MOUSE_DELTA:
+		return
 	var up: Vector3 = _get_up()
 	if up.length_squared() > _MIN_DIR_LEN_SQ:
 		global_basis = Basis(up, -mouse_dx * mouse_sensitivity) * global_basis
@@ -177,12 +223,15 @@ func _align_up_to_planet(delta: float, facing: Vector3) -> void:
 
 	var target_basis: Basis = Basis.looking_at(facing.normalized(), up).orthonormalized()
 	var blend: float = minf(1.0, surface_align_speed * delta)
-	global_transform.basis = Basis(
-		global_transform.basis.get_rotation_quaternion().slerp(
-			target_basis.get_rotation_quaternion(),
-			blend
-		)
-	)
+	var current_q: Quaternion = global_transform.basis.get_rotation_quaternion()
+	var target_q: Quaternion = target_basis.get_rotation_quaternion()
+	if current_q.dot(target_q) < 0.0:
+		target_q = -target_q
+	global_transform.basis = Basis(current_q.slerp(target_q, blend))
+
+
+func _orthonormalize_basis() -> void:
+	global_transform.basis = global_transform.basis.orthonormalized()
 
 
 func _cache_planet_refs() -> void:
@@ -217,6 +266,7 @@ func _apply_spawn(spawn: SpawnData) -> void:
 	global_transform = Transform3D(Basis.looking_at(spawn.forward, spawn.up), spawn.position)
 	velocity = Vector3.ZERO
 	_want_jump = false
+	_terrain_focus = false
 	_anim_state = ""
 	_update_gravity_direction()
 	_orbit_camera.rotation = Vector3(_orbit_camera.rotation.x, 0.0, _orbit_camera.rotation.z)
@@ -296,3 +346,20 @@ func _update_animation(move_dir: Vector3) -> void:
 		_set_anim_state(skin, "run" if Input.is_action_pressed("run") else "walk")
 	else:
 		_set_anim_state(skin, "idle")
+
+
+func _set_terrain_focus(enabled: bool) -> void:
+	if _terrain_focus == enabled:
+		return
+	_terrain_focus = enabled
+	velocity = Vector3.ZERO
+	_want_jump = false
+	if _terrain_focus:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func _is_terrain_edit_active() -> bool:
+	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
+	return brush != null and brush.get_edit_mode() != TerrainBrush.EditMode.OFF

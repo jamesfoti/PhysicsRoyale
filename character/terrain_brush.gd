@@ -52,6 +52,21 @@ func _process(delta: float) -> void:
 	var player: Node = get_parent()
 	if player == null:
 		return
+	if _is_terrain_focus_active(player):
+		_hover_hit = _raycast_terrain_from_view(player)
+		if _hover_hit.is_empty():
+			_cursor.hide_cursor()
+			if _is_painting and _terrain != null:
+				_is_painting = false
+				_terrain.end_continuous_edit()
+			return
+		_cursor.show_at(
+			_hover_hit.position,
+			_hover_hit.normal,
+			_mode == EditMode.ADD
+		)
+		_process_paint_input(delta)
+		return
 	if _is_camera_orbiting(player):
 		if _is_painting and _terrain != null:
 			_is_painting = false
@@ -71,6 +86,10 @@ func _process(delta: float) -> void:
 		_mode == EditMode.ADD
 	)
 
+	_process_paint_input(delta)
+
+
+func _process_paint_input(delta: float) -> void:
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		if _is_painting:
 			_is_painting = false
@@ -131,9 +150,11 @@ func _raycast_terrain_from_view(player: Node) -> Dictionary:
 	if camera == null:
 		return {}
 
-	var screen_center: Vector2 = get_viewport().get_visible_rect().size * 0.5
-	var ray_origin: Vector3 = camera.project_ray_origin(screen_center)
-	var ray_direction: Vector3 = camera.project_ray_normal(screen_center)
+	var screen_pos: Vector2 = get_viewport().get_visible_rect().size * 0.5
+	if _is_terrain_focus_active(player):
+		screen_pos = get_viewport().get_mouse_position()
+	var ray_origin: Vector3 = camera.project_ray_origin(screen_pos)
+	var ray_direction: Vector3 = camera.project_ray_normal(screen_pos)
 	var ray_query := PhysicsRayQueryParameters3D.new()
 	ray_query.from = ray_origin
 	ray_query.to = ray_origin + ray_direction * maxf(edit_distance * 2.0, 50.0)
@@ -153,4 +174,10 @@ func _is_camera_orbiting(player: Node) -> bool:
 	var orbit_camera: OrbitCamera = player.get_node_or_null("OrbitCamera") as OrbitCamera
 	if orbit_camera != null:
 		return orbit_camera.is_orbiting()
+	return false
+
+
+func _is_terrain_focus_active(player: Node) -> bool:
+	if player is PlanetPlayer:
+		return (player as PlanetPlayer).is_terrain_focus_active()
 	return false

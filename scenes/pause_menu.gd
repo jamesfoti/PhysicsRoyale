@@ -23,6 +23,7 @@ const _CONTROLS_LINES: Array[String] = [
 	"Esc — Free / capture mouse (or exit terrain edit)",
 	"F3 — Debug overlay",
 	"T — Cycle terrain edit off / destroy / add",
+	"Ctrl — Toggle terrain focus while editing (stay put, aim with mouse)",
 	"Hold left click — Paint terrain (threaded mesh rebuild)",
 ]
 

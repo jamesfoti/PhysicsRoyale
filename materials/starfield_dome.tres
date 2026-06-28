@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/starfield_dome.gdshader" id="1"]
+
+[resource]
+render_priority = -128
+shader = ExtResource("1")
+shader_parameter/space_color = Color(0.002, 0.002, 0.008, 1)
+shader_parameter/star_scale = 34.0
+shader_parameter/star_brightness = 1.25
+shader_parameter/star_size = 0.06

@@ -2,3 +2,9 @@
 builds/github/*.import
 build/
 tools/godot/
+builds/windows/*.import
+builds/windows/*.exe
+builds/macos/*.import
+builds/macos/*.zip
+builds/itch/*.zip
+.cursor/

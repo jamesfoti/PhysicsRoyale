@@ -18,6 +18,8 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if get_tree().paused:
 		return
+	if _is_terrain_focus_active():
+		return
 	if event.is_action_pressed("ui_cancel"):
 		if _is_terrain_edit_active():
 			return
@@ -36,6 +38,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _is_terrain_focus_active():
+		return
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		return
 
@@ -66,3 +70,8 @@ func recenter_yaw(delta: float) -> void:
 func _is_terrain_edit_active() -> bool:
 	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
 	return brush != null and brush.get_edit_mode() != TerrainBrush.EditMode.OFF
+
+
+func _is_terrain_focus_active() -> bool:
+	var player: PlanetPlayer = get_parent() as PlanetPlayer
+	return player != null and player.is_terrain_focus_active()

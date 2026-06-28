@@ -21,6 +21,8 @@ const _MARGIN: float = 8.0
 
 func _ready() -> void:
 	add_to_group("terrain_hud")
+	_edit_button.focus_mode = Control.FOCUS_NONE
+	_toggle_button.focus_mode = Control.FOCUS_NONE
 	_edit_button.pressed.connect(_on_edit_mode_pressed)
 	_toggle_button.pressed.connect(_on_toggle_pressed)
 	_set_expanded(false)
@@ -55,6 +57,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func sync_mouse_mode() -> void:
 	if get_tree().paused:
 		return
+	var player: PlanetPlayer = get_tree().get_first_node_in_group("player") as PlanetPlayer
+	if player != null and player.is_terrain_focus_active():
+		Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
+		return
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
@@ -68,7 +74,7 @@ func _process(_delta: float) -> void:
 		pos_line = "Player's position: (x = %.0f, y = %.0f, z = %.0f)" % [p.x, p.y, p.z]
 	_fps.text = "Frames Per Second (FPS): %d" % Engine.get_frames_per_second()
 	_position.text = pos_line
-	_edit_mode_label.text = "Terrain edit: %s" % _edit_mode_text()
+	_edit_mode_label.text = _edit_mode_display_text()
 	_queue_layout()
 
 
@@ -87,6 +93,10 @@ func _cycle_edit_mode() -> void:
 
 
 func _set_edit_mode(mode: TerrainBrush.EditMode) -> void:
+	if mode == TerrainBrush.EditMode.OFF:
+		var player: PlanetPlayer = get_tree().get_first_node_in_group("player") as PlanetPlayer
+		if player != null and player.is_terrain_focus_active():
+			player.exit_terrain_focus()
 	_edit_mode = mode
 	_update_edit_mode_ui()
 	terrain_edit_mode_changed.emit(_edit_mode)
@@ -104,7 +114,15 @@ func _update_edit_mode_ui() -> void:
 		TerrainBrush.EditMode.ADD:
 			_edit_button.modulate = Color(0.25, 0.85, 1.0)
 	if _expanded:
-		_edit_mode_label.text = "Terrain edit: %s" % _edit_mode_text()
+		_edit_mode_label.text = _edit_mode_display_text()
+
+
+func _edit_mode_display_text() -> String:
+	var text: String = "Terrain edit: %s" % _edit_mode_text()
+	var player: PlanetPlayer = get_tree().get_first_node_in_group("player") as PlanetPlayer
+	if player != null and player.is_terrain_focus_active():
+		text += " (Ctrl focus)"
+	return text
 
 
 func _edit_mode_text() -> String:
