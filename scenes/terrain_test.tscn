@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://cepuebvnerpyu"]
+[gd_scene load_steps=11 format=3 uid="uid://cepuebvnerpyu"]
 
 [ext_resource type="Script" uid="uid://oo8yvl75l0h5" path="res://terrain/terrain_world.gd" id="1"]
 [ext_resource type="Material" path="res://materials/terrain_default.tres" id="2"]
@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://sunbodyterrain01" path="res://scenes/sun.tscn" id="8"]
 [ext_resource type="Script" path="res://scenes/world_environment_web.gd" id="9"]
 [ext_resource type="PackedScene" path="res://gui/player_item_menu.tscn" id="10"]
+[ext_resource type="Script" path="res://asteroids/asteroid_spawner.gd" id="11"]
 
 [node name="TerrainTest" type="Node3D" unique_id=234830412]
 
@@ -99,3 +100,6 @@ layout_mode = 2
 text = "Terrain edit: Off"
 
 [node name="PauseMenu" parent="." instance=ExtResource("7")]
+
+[node name="AsteroidSpawner" type="Node" parent="."]
+script = ExtResource("11")
