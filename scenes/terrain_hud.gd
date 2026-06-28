@@ -147,5 +147,5 @@ func _layout_anchor() -> void:
 func _set_expanded(expanded: bool) -> void:
 	_expanded = expanded
 	_panel.visible = expanded
-	_toggle_button.text = "Debug ▲" if expanded else "Debug ▼"
+	_toggle_button.text = "Debug (F3) ▲" if expanded else "Debug (F3) ▼"
 	_queue_layout()

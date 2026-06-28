@@ -68,7 +68,7 @@ theme_override_constants/separation = 4
 [node name="ToggleButton" type="Button" parent="HUD/Bar/Anchor"]
 layout_mode = 2
 size_flags_horizontal = 8
-text = "Debug ▼"
+text = "Debug (F3) ▼"
 
 [node name="Panel" type="PanelContainer" parent="HUD/Bar/Anchor"]
 visible = false

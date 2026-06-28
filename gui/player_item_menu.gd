@@ -64,7 +64,7 @@ func _on_toggle_pressed() -> void:
 func _set_open(open: bool) -> void:
 	_open = open
 	_popup.visible = open
-	_toggle_button.text = "Items ▲" if open else "Items ▼"
+	_toggle_button.text = "Inventory (E) ▲" if open else "Inventory (E) ▼"
 	if open:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	else:

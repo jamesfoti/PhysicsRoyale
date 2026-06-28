@@ -55,6 +55,11 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if get_tree().paused:
 		return
+	if _is_item_menu_open():
+		if event.is_action_pressed("item_menu"):
+			_toggle_item_menu()
+			get_viewport().set_input_as_handled()
+		return
 	if _terrain_focus and event.is_action_pressed("ui_cancel"):
 		_set_terrain_focus(false)
 		get_viewport().set_input_as_handled()
@@ -67,15 +72,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("jump"):
 		_want_jump = true
-	if event.is_action_pressed("wave") and is_on_floor() and not _get_skin().is_waving():
-		_get_skin().wave()
 	if event.is_action_pressed("item_menu"):
 		_toggle_item_menu()
 		get_viewport().set_input_as_handled()
 
 
 func _input(event: InputEvent) -> void:
-	if not _spawned or _terrain_focus:
+	if not _spawned or _terrain_focus or _is_item_menu_open():
 		return
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		return
@@ -98,6 +101,13 @@ func _physics_process(delta: float) -> void:
 		_apply_focus_physics(delta)
 		var focus_facing: Vector3 = _get_flat_forward()
 		_align_up_to_planet(delta, focus_facing)
+		move_and_slide()
+		_update_animation(Vector3.ZERO)
+		return
+
+	if _is_item_menu_open():
+		_want_jump = false
+		_apply_focus_physics(delta)
 		move_and_slide()
 		_update_animation(Vector3.ZERO)
 		return
@@ -371,6 +381,11 @@ func _set_terrain_focus(enabled: bool) -> void:
 func _is_terrain_edit_active() -> bool:
 	var brush: TerrainBrush = get_tree().get_first_node_in_group("terrain_brush") as TerrainBrush
 	return brush != null and brush.get_edit_mode() != TerrainBrush.EditMode.OFF
+
+
+func _is_item_menu_open() -> bool:
+	var menu: PlayerItemMenu = get_tree().get_first_node_in_group("player_item_menu") as PlayerItemMenu
+	return menu != null and menu.is_open()
 
 
 func _connect_terrain_hud() -> void:

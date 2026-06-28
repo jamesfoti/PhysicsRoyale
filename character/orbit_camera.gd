@@ -22,6 +22,8 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if get_tree().paused:
 		return
+	if _is_item_menu_open():
+		return
 	if _is_terrain_focus_active():
 		return
 	if event.is_action_pressed("ui_cancel"):
@@ -47,6 +49,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _is_item_menu_open():
+		return
 	if _is_terrain_focus_active():
 		return
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
@@ -102,3 +106,8 @@ func _is_terrain_edit_active() -> bool:
 func _is_terrain_focus_active() -> bool:
 	var player: PlanetPlayer = get_parent() as PlanetPlayer
 	return player != null and player.is_terrain_focus_active()
+
+
+func _is_item_menu_open() -> bool:
+	var menu: PlayerItemMenu = get_tree().get_first_node_in_group("player_item_menu") as PlayerItemMenu
+	return menu != null and menu.is_open()
