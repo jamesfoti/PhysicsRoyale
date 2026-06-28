@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled;
+render_mode unshaded, cull_back, depth_draw_never, fog_disabled;
 
 uniform vec3 space_color : source_color = vec3(0.0, 0.0, 0.01);
 uniform float star_scale : hint_range(8.0, 80.0) = 34.0;
@@ -43,6 +43,8 @@ float stars_at(vec3 dir, float scale, float size, float seed) {
 }
 
 void vertex() {
+	vec4 view_pos = VIEW * MODEL_MATRIX * vec4(VERTEX, 1.0);
+	POSITION = vec4(view_pos.xy, view_pos.w, view_pos.w);
 	vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec3 origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 	v_dir = normalize(world_pos - origin);

@@ -186,6 +186,7 @@ var _async_rebuild_requested: bool = false
 var _async_jobs: Dictionary = {}
 var _running_async_tasks: int = 0
 var _inflight_coords: Dictionary = {}
+var _web_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -358,7 +359,7 @@ func _make_settings_snapshot() -> SettingsSnapshot:
 	settings.noise_lacunarity = noise_lacunarity
 	settings.noise_gain = noise_gain
 	settings.generate_collision = generate_collision
-	settings.material = terrain_material
+	settings.material = _effective_material()
 	settings.bounds_center = global_position
 	settings.bounds_half = get_world_extents() * 0.5
 	settings.bounds_falloff_enabled = bounds_falloff_enabled
@@ -500,8 +501,8 @@ func _apply_async_job(job: ChunkMeshBuilder.AsyncRebuildJob) -> void:
 		if build == null:
 			continue
 		chunk.apply_build_result(build, generate_collision)
-		if terrain_material != null:
-			chunk.material_override = terrain_material
+		if _effective_material() != null:
+			chunk.material_override = _effective_material()
 
 
 func _make_thread_settings_snapshot() -> SettingsSnapshot:
@@ -629,6 +630,29 @@ func _chunk_corner_local(coord: Vector3i, settings: SettingsSnapshot) -> Vector3
 		* 0.5
 	)
 	return grid_origin + Vector3(coord) * extent
+
+
+func _effective_material() -> Material:
+	if terrain_material == null:
+		return null
+	if not OS.has_feature("web"):
+		return terrain_material
+	if _web_material == null:
+		_web_material = _create_web_unshaded_material(terrain_material)
+	return _web_material
+
+
+func _create_web_unshaded_material(source: Material) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if source is StandardMaterial3D:
+		var src: StandardMaterial3D = source as StandardMaterial3D
+		var color: Color = src.albedo_color
+		if src.emission_enabled:
+			var glow: Color = src.emission * src.emission_energy_multiplier
+			color = (color + glow).clamp(Color.BLACK, Color(2.5, 2.5, 2.5, 1.0))
+		mat.albedo_color = color
+	return mat
 
 
 func _register_editor_scene_node(node: Node) -> void:

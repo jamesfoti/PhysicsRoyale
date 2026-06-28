@@ -1,6 +1,6 @@
 extends Node3D
 
-@onready var godot_plush_mesh = $GodotPlushModel/Rig/Skeleton3D/GodotPlushMesh
+@onready var godot_plush_mesh: MeshInstance3D = $GodotPlushModel/Rig/Skeleton3D/GodotPlushMesh
 @onready var physical_bone_simulator_3d = %PhysicalBoneSimulator3D
 @onready var animation_tree : AnimationTree = %AnimationTree
 @onready var state_machine : AnimationNodeStateMachinePlayback = animation_tree.get("parameters/StateMachine/playback")
@@ -12,8 +12,17 @@ var squash_and_stretch = 1.0 : set = _set_squash_and_stretch
 signal footstep(intensity : float)
 signal waved
 
-func _ready():
+func _ready() -> void:
 	_set_ragdoll(ragdoll)
+	if OS.has_feature("web"):
+		_apply_web_material()
+
+
+func _apply_web_material() -> void:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.35, 0.68, 0.95, 1.0)
+	godot_plush_mesh.material_override = mat
 
 func _set_ragdoll(value : bool) -> void:
 	ragdoll = value
