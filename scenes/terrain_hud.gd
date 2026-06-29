@@ -11,6 +11,10 @@ signal terrain_edit_mode_changed(mode: TerrainBrush.EditMode)
 @onready var _panel: PanelContainer = $Bar/Anchor/Panel
 @onready var _fps: Label = $Bar/Anchor/Panel/Margin/Fields/Fps
 @onready var _position: Label = $Bar/Anchor/Panel/Margin/Fields/Position
+@onready var _chunks: Label = $Bar/Anchor/Panel/Margin/Fields/Chunks
+@onready var _chunk_size: Label = $Bar/Anchor/Panel/Margin/Fields/ChunkSize
+@onready var _planet_size: Label = $Bar/Anchor/Panel/Margin/Fields/PlanetSize
+@onready var _vertex_count: Label = $Bar/Anchor/Panel/Margin/Fields/VertexCount
 @onready var _edit_mode_label: Label = $Bar/Anchor/Panel/Margin/Fields/EditMode
 
 var _expanded: bool = false
@@ -92,8 +96,50 @@ func _process(_delta: float) -> void:
 		pos_line = "Player's position: (x = %.0f, y = %.0f, z = %.0f)" % [p.x, p.y, p.z]
 	_fps.text = "Frames Per Second (FPS): %d" % Engine.get_frames_per_second()
 	_position.text = pos_line
+	_update_planet_debug_labels()
 	_edit_mode_label.text = _edit_mode_display_text()
 	_queue_layout()
+
+
+func _update_planet_debug_labels() -> void:
+	var terrain: TerrainWorldV2 = (
+		get_tree().get_first_node_in_group("terrain_world") as TerrainWorldV2
+	)
+	if terrain == null:
+		_chunks.text = "Chunks: n/a"
+		_chunk_size.text = "Chunk size: n/a"
+		_planet_size.text = "Planet size: n/a"
+		_vertex_count.text = "Mesh: n/a"
+		return
+
+	var grid_axis: int = terrain.get_grid_chunks_per_axis()
+	var chunk_count: int = terrain.get_chunk_count()
+	var chunk_extent: float = terrain.get_chunk_world_extent()
+	var planet_radius: float = terrain.get_sphere_radius()
+	var planet_diameter: float = planet_radius * 2.0
+	var vertex_count: int = terrain.get_total_vertex_count()
+	var triangle_count: int = terrain.get_total_triangle_count()
+	var edited_voxels: int = terrain.get_edited_voxel_count()
+
+	_chunks.text = "Chunks: %d (%d×%d×%d grid)" % [
+		chunk_count, grid_axis, grid_axis, grid_axis
+	]
+	_chunk_size.text = "Chunk size: %.1f" % chunk_extent
+	_planet_size.text = "Planet size: %.1f radius (%.1f diameter)" % [
+		planet_radius, planet_diameter
+	]
+	_vertex_count.text = (
+		"Mesh: %s verts / %s tris (edited voxels: %s)"
+		% [_format_count(vertex_count), _format_count(triangle_count), _format_count(edited_voxels)]
+	)
+
+
+func _format_count(value: int) -> String:
+	if value < 1000:
+		return str(value)
+	if value < 1000000:
+		return "%.1fK" % (float(value) / 1000.0)
+	return "%.2fM" % (float(value) / 1000000.0)
 
 
 func _update_edit_mode_ui() -> void:

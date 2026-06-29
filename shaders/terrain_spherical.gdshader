@@ -1,10 +1,8 @@
 shader_type spatial;
 render_mode cull_back, diffuse_lambert, specular_disabled, fog_disabled;
 
-uniform vec3 sun_direction = vec3(-1.0, 0.0, 0.0);
-uniform float ambient_strength : hint_range(0.0, 1.0) = 0.48;
-uniform vec3 planet_center = vec3(180.0, 0.0, 0.0);
-uniform float planet_radius = 18.0;
+uniform vec3 planet_center;
+uniform float planet_radius;
 
 uniform vec4 grass_color : source_color = vec4(0.22, 0.68, 0.18, 1.0);
 uniform vec4 dirt_color : source_color = vec4(0.45, 0.38, 0.28, 1.0);
@@ -50,7 +48,6 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 n = normalize(NORMAL);
 	vec3 sphere_dir = normalize(world_vertex - planet_center);
 	float elevation = length(world_vertex - planet_center) - planet_radius;
 	float rock_blend = smoothstep(rock_elevation_start, rock_elevation_end, elevation);
@@ -69,7 +66,5 @@ void fragment() {
 	float pole_snow = smoothstep(pole_snow_start, pole_snow_end, abs(sphere_dir.y));
 	base = mix(base, snow_color.rgb, pole_snow);
 
-	float ndl = max(dot(n, normalize(sun_direction)), 0.0);
-	float light = ambient_strength + (1.0 - ambient_strength) * ndl;
-	ALBEDO = base * light;
+	ALBEDO = base;
 }

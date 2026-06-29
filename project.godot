@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="PhysicsRoyale"
-run/main_scene="res://scenes/terrain_test.tscn"
+run/main_scene="res://scenes/loading_screen.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 
 [audio]
@@ -94,9 +94,6 @@ terrain_focus={
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
 environment/default_clear_color=Color(0, 0, 0, 1)
 environment/default_environment="res://materials/terrain_env.tres"
-
-[rendering/textures/vram_compression]
-
-import_etc2_astc=true

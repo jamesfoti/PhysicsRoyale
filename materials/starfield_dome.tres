@@ -1,6 +1,6 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" format=3 uid="uid://buoqqtf67l2u3"]
 
-[ext_resource type="Shader" path="res://shaders/starfield_dome.gdshader" id="1"]
+[ext_resource type="Shader" uid="uid://cqq308hobx4w7" path="res://shaders/starfield_dome.gdshader" id="1"]
 
 [resource]
 render_priority = -128

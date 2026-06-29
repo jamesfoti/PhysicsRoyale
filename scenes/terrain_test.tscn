@@ -4,9 +4,9 @@
 [ext_resource type="Material" uid="uid://ct8q5pbs54ajt" path="res://materials/terrain_procedural.tres" id="2"]
 [ext_resource type="Script" uid="uid://jysu1w1r2tv7" path="res://scenes/terrain_hud.gd" id="4"]
 [ext_resource type="Environment" uid="uid://c8gcug836onl0" path="res://materials/terrain_env.tres" id="5"]
-[ext_resource type="PackedScene" uid="uid://bqm7planetplayer1" path="res://character/player.tscn" id="6"]
-[ext_resource type="PackedScene" uid="uid://pausemenuterrain01" path="res://scenes/pause_menu.tscn" id="7"]
-[ext_resource type="PackedScene" uid="uid://sunbodyterrain01" path="res://scenes/sun.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://character/player.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/pause_menu.tscn" id="7"]
+[ext_resource type="PackedScene" uid="uid://bnpr1un6n0hoq" path="res://scenes/sun.tscn" id="8"]
 [ext_resource type="PackedScene" path="res://gui/player_item_menu.tscn" id="10"]
 [ext_resource type="Script" path="res://asteroids/asteroid_spawner.gd" id="11"]
 
@@ -92,6 +92,22 @@ text = "Frames Per Second (FPS): --"
 [node name="Position" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
 layout_mode = 2
 text = "Player's position: n/a"
+
+[node name="Chunks" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Chunks: n/a"
+
+[node name="ChunkSize" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Chunk size: n/a"
+
+[node name="PlanetSize" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Planet size: n/a"
+
+[node name="VertexCount" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
+layout_mode = 2
+text = "Mesh: n/a"
 
 [node name="EditMode" type="Label" parent="HUD/Bar/Anchor/Panel/Margin/Fields"]
 layout_mode = 2

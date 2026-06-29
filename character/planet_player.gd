@@ -19,7 +19,7 @@ class SpawnData:
 
 @export var planet: Node3D
 @export var speed: float = 5.0
-@export var run_speed: float = 8.0f
+@export var run_speed: float = 8.0
 @export var jump_velocity: float = 4.5
 @export var gravity_strength: float = 9.8
 @export var surface_align_speed: float = 10.0

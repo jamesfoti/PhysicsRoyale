@@ -6,6 +6,7 @@ extends Node3D
 const _CHUNK_SCRIPT = preload("res://terrain/terrain_chunk.gd")
 const RECOMMENDED_RAVINE_DEPTH := 12.0
 const RECOMMENDED_RAVINE_WIDTH := 0.08
+const LOADING_REBUILD_BATCH_SIZE: int = 1
 
 
 class SettingsSnapshot:
@@ -186,6 +187,17 @@ var _async_rebuild_requested: bool = false
 var _async_jobs: Dictionary = {}
 var _running_async_tasks: int = 0
 var _inflight_coords: Dictionary = {}
+var _runtime_shader_material: ShaderMaterial
+var _initial_rebuild_complete: bool = false
+var _loading_rebuild_coords: Array[Vector3i] = []
+var _loading_rebuild_settings: SettingsSnapshot
+var _loading_rebuild_edge_cache: Dictionary = {}
+var _loading_rebuild_total_chunks: int = 0
+var _loading_rebuild_built_chunks: int = 0
+var _loading_rebuild_t0_ms: int = 0
+
+signal initial_rebuild_finished
+signal initial_rebuild_progress(completed_chunks: int, total_chunks: int)
 
 
 func _ready() -> void:
@@ -194,7 +206,14 @@ func _ready() -> void:
 		add_to_group("terrain_world")
 		add_to_group("planet")
 	if rebuild_on_ready and not Engine.is_editor_hint():
-		rebuild_all()
+		call_deferred("rebuild_all")
+	elif terrain_material != null:
+		_refresh_shader_material_uniforms()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSFORM_CHANGED and _runtime_shader_material != null:
+		_sync_terrain_shader_uniforms(_runtime_shader_material)
 
 
 func _process(_delta: float) -> void:
@@ -224,33 +243,148 @@ func rebuild_all() -> void:
 	_clear_chunks()
 	var settings := _make_settings_snapshot()
 	var grid_chunks := _grid_chunks_per_axis()
+
+	if not Engine.is_editor_hint() and not _initial_rebuild_complete:
+		_start_batched_initial_rebuild(settings, grid_chunks)
+		return
+
+	_rebuild_all_sync(settings, grid_chunks)
+
+
+func _start_batched_initial_rebuild(settings: SettingsSnapshot, grid_chunks: int) -> void:
+	_loading_rebuild_settings = settings
+	_loading_rebuild_edge_cache = {}
+	_loading_rebuild_coords.clear()
+	_loading_rebuild_built_chunks = 0
+	_loading_rebuild_total_chunks = grid_chunks * grid_chunks * grid_chunks
+	_loading_rebuild_t0_ms = Time.get_ticks_msec()
+	for cz: int in grid_chunks:
+		for cy: int in grid_chunks:
+			for cx: int in grid_chunks:
+				_loading_rebuild_coords.append(Vector3i(cx, cy, cz))
+	call_deferred("_process_loading_rebuild_batch")
+
+
+func _process_loading_rebuild_batch() -> void:
+	if _loading_rebuild_coords.is_empty():
+		_finish_batched_initial_rebuild()
+		return
+
+	var settings: SettingsSnapshot = _loading_rebuild_settings
+	var batch_count: int = 0
+	while batch_count < LOADING_REBUILD_BATCH_SIZE and not _loading_rebuild_coords.is_empty():
+		var coord: Vector3i = _loading_rebuild_coords.pop_back()
+		_build_chunk_at(coord, settings, _loading_rebuild_edge_cache)
+		_loading_rebuild_built_chunks += 1
+		initial_rebuild_progress.emit(_loading_rebuild_built_chunks, _loading_rebuild_total_chunks)
+		batch_count += 1
+
+	call_deferred("_process_loading_rebuild_batch")
+
+
+func _finish_batched_initial_rebuild() -> void:
+	var elapsed: int = Time.get_ticks_msec() - _loading_rebuild_t0_ms
+	var grid_chunks: int = _grid_chunks_per_axis()
+	_log_rebuild_complete(_chunks.size(), _loading_rebuild_settings, grid_chunks, elapsed)
+	_loading_rebuild_settings = null
+	_loading_rebuild_coords.clear()
+	_mark_initial_rebuild_complete()
+
+
+func _rebuild_all_sync(settings: SettingsSnapshot, grid_chunks: int) -> void:
 	var edge_world_cache: Dictionary = {}
-	var t0 := Time.get_ticks_msec()
-	for cz in grid_chunks:
-		for cy in grid_chunks:
-			for cx in grid_chunks:
+	var t0: int = Time.get_ticks_msec()
+	for cz: int in grid_chunks:
+		for cy: int in grid_chunks:
+			for cx: int in grid_chunks:
 				var coord := Vector3i(cx, cy, cz)
-				var chunk := _CHUNK_SCRIPT.new()
-				chunk.name = "Chunk_%d_%d_%d" % [cx, cy, cz]
-				chunk.chunk_coord = coord
-				add_child(chunk)
-				chunk.rebuild(settings, edge_world_cache)
-				if settings.material != null:
-					chunk.material_override = settings.material
-				_register_editor_scene_node(chunk)
-				_chunks[coord] = chunk
-	var elapsed := Time.get_ticks_msec() - t0
+				_build_chunk_at(coord, settings, edge_world_cache)
+	var elapsed: int = Time.get_ticks_msec() - t0
+	_log_rebuild_complete(_chunks.size(), settings, grid_chunks, elapsed)
+
+
+func _build_chunk_at(
+	coord: Vector3i,
+	settings: SettingsSnapshot,
+	edge_world_cache: Dictionary
+) -> void:
+	var chunk: TerrainChunkV2 = _CHUNK_SCRIPT.new()
+	chunk.name = "Chunk_%d_%d_%d" % [coord.x, coord.y, coord.z]
+	chunk.chunk_coord = coord
+	if not is_playable_planet:
+		chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(chunk)
+	chunk.rebuild(settings, edge_world_cache)
+	if settings.material != null:
+		chunk.material_override = settings.material
+	_register_editor_scene_node(chunk)
+	_chunks[coord] = chunk
+
+
+func _mark_initial_rebuild_complete() -> void:
+	if _initial_rebuild_complete:
+		return
+	_initial_rebuild_complete = true
+	initial_rebuild_finished.emit()
+
+
+func _log_rebuild_complete(
+	chunk_count: int,
+	settings: SettingsSnapshot,
+	grid_chunks: int,
+	elapsed_ms: int
+) -> void:
 	print(
 		"[TerrainWorldV2] Rebuilt ",
-		_chunks.size(),
+		chunk_count,
 		" chunks (",
 		settings.cells_per_axis,
 		" cells/axis, ",
 		grid_chunks,
 		"^3 grid) in ",
-		elapsed,
+		elapsed_ms,
 		" ms"
 	)
+
+
+func is_initial_rebuild_complete() -> bool:
+	return _initial_rebuild_complete
+
+
+func get_chunk_count() -> int:
+	return _chunks.size()
+
+
+func get_total_vertex_count() -> int:
+	var total: int = 0
+	for coord_variant: Variant in _chunks.keys():
+		var chunk: TerrainChunkV2 = _chunks[coord_variant] as TerrainChunkV2
+		if chunk == null or chunk.mesh == null:
+			continue
+		var array_mesh: ArrayMesh = chunk.mesh as ArrayMesh
+		if array_mesh == null:
+			continue
+		for surface_idx: int in array_mesh.get_surface_count():
+			total += array_mesh.surface_get_array_len(surface_idx)
+	return total
+
+
+func get_total_triangle_count() -> int:
+	var total_indices: int = 0
+	for coord_variant: Variant in _chunks.keys():
+		var chunk: TerrainChunkV2 = _chunks[coord_variant] as TerrainChunkV2
+		if chunk == null or chunk.mesh == null:
+			continue
+		var array_mesh: ArrayMesh = chunk.mesh as ArrayMesh
+		if array_mesh == null:
+			continue
+		for surface_idx: int in array_mesh.get_surface_count():
+			total_indices += array_mesh.surface_get_array_index_len(surface_idx)
+	return int(total_indices / 3)
+
+
+func get_edited_voxel_count() -> int:
+	return _edits.get_override_count()
 
 
 func get_grid_chunks_per_axis() -> int:
@@ -284,6 +418,10 @@ func get_voxel_size() -> float:
 
 func get_sphere_radius() -> float:
 	return planet_radius_chunks * chunk_size
+
+
+func get_planet_center_world() -> Vector3:
+	return global_position + sphere_center
 
 
 func get_world_extents() -> Vector3:
@@ -631,10 +769,21 @@ func _chunk_corner_local(coord: Vector3i, settings: SettingsSnapshot) -> Vector3
 
 
 func _effective_material() -> Material:
+	return _refresh_shader_material_uniforms()
+
+
+func _refresh_shader_material_uniforms() -> Material:
 	if terrain_material == null:
 		return null
-	_sync_terrain_shader_uniforms(terrain_material)
-	return terrain_material
+	var source: ShaderMaterial = terrain_material as ShaderMaterial
+	if source == null or source.shader == null:
+		return terrain_material
+	if source.shader.resource_path != "res://shaders/terrain_spherical.gdshader":
+		return terrain_material
+	if _runtime_shader_material == null:
+		_runtime_shader_material = source.duplicate() as ShaderMaterial
+	_sync_terrain_shader_uniforms(_runtime_shader_material)
+	return _runtime_shader_material
 
 
 func _sync_terrain_shader_uniforms(mat: Material) -> void:
@@ -643,7 +792,7 @@ func _sync_terrain_shader_uniforms(mat: Material) -> void:
 		return
 	if sm.shader.resource_path != "res://shaders/terrain_spherical.gdshader":
 		return
-	sm.set_shader_parameter("planet_center", global_position + sphere_center)
+	sm.set_shader_parameter("planet_center", get_planet_center_world())
 	sm.set_shader_parameter("planet_radius", get_sphere_radius())
 
 
