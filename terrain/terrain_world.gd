@@ -6,7 +6,6 @@ extends Node3D
 const _CHUNK_SCRIPT = preload("res://terrain/terrain_chunk.gd")
 const RECOMMENDED_RAVINE_DEPTH := 12.0
 const RECOMMENDED_RAVINE_WIDTH := 0.08
-const LOADING_REBUILD_BATCH_SIZE: int = 1
 
 
 class SettingsSnapshot:
@@ -188,16 +187,6 @@ var _async_jobs: Dictionary = {}
 var _running_async_tasks: int = 0
 var _inflight_coords: Dictionary = {}
 var _runtime_shader_material: ShaderMaterial
-var _initial_rebuild_complete: bool = false
-var _loading_rebuild_coords: Array[Vector3i] = []
-var _loading_rebuild_settings: SettingsSnapshot
-var _loading_rebuild_edge_cache: Dictionary = {}
-var _loading_rebuild_total_chunks: int = 0
-var _loading_rebuild_built_chunks: int = 0
-var _loading_rebuild_t0_ms: int = 0
-
-signal initial_rebuild_finished
-signal initial_rebuild_progress(completed_chunks: int, total_chunks: int)
 
 
 func _ready() -> void:
@@ -243,52 +232,7 @@ func rebuild_all() -> void:
 	_clear_chunks()
 	var settings := _make_settings_snapshot()
 	var grid_chunks := _grid_chunks_per_axis()
-
-	if not Engine.is_editor_hint() and not _initial_rebuild_complete:
-		_start_batched_initial_rebuild(settings, grid_chunks)
-		return
-
 	_rebuild_all_sync(settings, grid_chunks)
-
-
-func _start_batched_initial_rebuild(settings: SettingsSnapshot, grid_chunks: int) -> void:
-	_loading_rebuild_settings = settings
-	_loading_rebuild_edge_cache = {}
-	_loading_rebuild_coords.clear()
-	_loading_rebuild_built_chunks = 0
-	_loading_rebuild_total_chunks = grid_chunks * grid_chunks * grid_chunks
-	_loading_rebuild_t0_ms = Time.get_ticks_msec()
-	for cz: int in grid_chunks:
-		for cy: int in grid_chunks:
-			for cx: int in grid_chunks:
-				_loading_rebuild_coords.append(Vector3i(cx, cy, cz))
-	call_deferred("_process_loading_rebuild_batch")
-
-
-func _process_loading_rebuild_batch() -> void:
-	if _loading_rebuild_coords.is_empty():
-		_finish_batched_initial_rebuild()
-		return
-
-	var settings: SettingsSnapshot = _loading_rebuild_settings
-	var batch_count: int = 0
-	while batch_count < LOADING_REBUILD_BATCH_SIZE and not _loading_rebuild_coords.is_empty():
-		var coord: Vector3i = _loading_rebuild_coords.pop_back()
-		_build_chunk_at(coord, settings, _loading_rebuild_edge_cache)
-		_loading_rebuild_built_chunks += 1
-		initial_rebuild_progress.emit(_loading_rebuild_built_chunks, _loading_rebuild_total_chunks)
-		batch_count += 1
-
-	call_deferred("_process_loading_rebuild_batch")
-
-
-func _finish_batched_initial_rebuild() -> void:
-	var elapsed: int = Time.get_ticks_msec() - _loading_rebuild_t0_ms
-	var grid_chunks: int = _grid_chunks_per_axis()
-	_log_rebuild_complete(_chunks.size(), _loading_rebuild_settings, grid_chunks, elapsed)
-	_loading_rebuild_settings = null
-	_loading_rebuild_coords.clear()
-	_mark_initial_rebuild_complete()
 
 
 func _rebuild_all_sync(settings: SettingsSnapshot, grid_chunks: int) -> void:
@@ -321,13 +265,6 @@ func _build_chunk_at(
 	_chunks[coord] = chunk
 
 
-func _mark_initial_rebuild_complete() -> void:
-	if _initial_rebuild_complete:
-		return
-	_initial_rebuild_complete = true
-	initial_rebuild_finished.emit()
-
-
 func _log_rebuild_complete(
 	chunk_count: int,
 	settings: SettingsSnapshot,
@@ -345,10 +282,6 @@ func _log_rebuild_complete(
 		elapsed_ms,
 		" ms"
 	)
-
-
-func is_initial_rebuild_complete() -> bool:
-	return _initial_rebuild_complete
 
 
 func get_chunk_count() -> int:

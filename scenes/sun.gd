@@ -18,8 +18,6 @@ func _ready() -> void:
 	_light.light_energy = light_energy
 	_light.light_color = light_color
 	_light.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY
-	if _terrain != null:
-		_terrain.initial_rebuild_finished.connect(_configure_sun_mesh)
 	call_deferred("_configure_sun_mesh")
 	call_deferred("_update_light_direction")
 
