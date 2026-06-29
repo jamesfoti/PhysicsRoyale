@@ -186,7 +186,6 @@ var _async_rebuild_requested: bool = false
 var _async_jobs: Dictionary = {}
 var _running_async_tasks: int = 0
 var _inflight_coords: Dictionary = {}
-var _web_material: ShaderMaterial
 
 
 func _ready() -> void:
@@ -408,8 +407,7 @@ func _deferred_rebuild() -> void:
 
 
 func _use_threaded_rebuild() -> bool:
-	# Web export runs without worker threads unless COOP/COEP headers are enabled.
-	return use_threaded_rebuild and not Engine.is_editor_hint() and not OS.has_feature("web")
+	return use_threaded_rebuild and not Engine.is_editor_hint()
 
 
 func _dispatch_pending_rebuilds() -> void:
@@ -635,38 +633,18 @@ func _chunk_corner_local(coord: Vector3i, settings: SettingsSnapshot) -> Vector3
 func _effective_material() -> Material:
 	if terrain_material == null:
 		return null
-	if not OS.has_feature("web"):
-		return terrain_material
-	if _web_material == null:
-		_web_material = _create_web_unshaded_material(terrain_material)
-	return _web_material
+	_sync_terrain_shader_uniforms(terrain_material)
+	return terrain_material
 
 
-func _create_web_unshaded_material(source: Material) -> ShaderMaterial:
-	var mat := ShaderMaterial.new()
-	mat.shader = preload("res://shaders/web_flat_lit.gdshader")
-	var albedo: Color = Color(0.35, 0.55, 0.28, 1.0)
-	var emissive_boost: float = 0.0
-	if source is StandardMaterial3D:
-		var src: StandardMaterial3D = source as StandardMaterial3D
-		albedo = src.albedo_color
-		if src.emission_enabled:
-			emissive_boost = src.emission_energy_multiplier * 0.35
-			albedo = (albedo + src.emission * 0.5).clamp(Color.BLACK, Color(2.5, 2.5, 2.5, 1.0))
-	mat.set_shader_parameter("albedo", albedo)
-	mat.set_shader_parameter("sun_direction", _get_web_sun_direction())
-	mat.set_shader_parameter("emissive_boost", emissive_boost)
-	return mat
-
-
-func _get_web_sun_direction() -> Vector3:
-	var sun: Node3D = get_tree().get_first_node_in_group("sun") as Node3D
-	if sun == null:
-		return Vector3(-1.0, 0.0, 0.0)
-	var to_sun: Vector3 = sun.global_position - global_position
-	if to_sun.length_squared() < 0.0001:
-		return Vector3(-1.0, 0.0, 0.0)
-	return to_sun.normalized()
+func _sync_terrain_shader_uniforms(mat: Material) -> void:
+	var sm: ShaderMaterial = mat as ShaderMaterial
+	if sm == null or sm.shader == null:
+		return
+	if sm.shader.resource_path != "res://shaders/terrain_spherical.gdshader":
+		return
+	sm.set_shader_parameter("planet_center", global_position + sphere_center)
+	sm.set_shader_parameter("planet_radius", get_sphere_radius())
 
 
 func _register_editor_scene_node(node: Node) -> void:

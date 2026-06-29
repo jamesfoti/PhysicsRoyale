@@ -63,20 +63,10 @@ signal pickaxe_equipped_changed(equipped: bool)
 
 func _ready() -> void:
 	_set_ragdoll(ragdoll)
-	if OS.has_feature("web"):
-		_apply_web_material()
 	_register_torch_animations()
 	_setup_torch_attachment()
 	_setup_pickaxe_attachment()
 	get_tree().process_frame.connect(_apply_hand_item_pose)
-
-
-func _apply_web_material() -> void:
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_texture = preload("res://character/godot_plush/material/godot_plush_albedo.png")
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	godot_plush_mesh.material_override = mat
 
 
 func _set_ragdoll(value: bool) -> void:

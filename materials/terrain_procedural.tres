@@ -1,0 +1,20 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://ct8q5pbs54ajt"]
+
+[ext_resource type="Shader" uid="uid://t3j8fdrbrkt8" path="res://shaders/terrain_spherical.gdshader" id="1"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1")
+shader_parameter/sun_direction = Vector3(-1, 0, 0)
+shader_parameter/ambient_strength = 0.42
+shader_parameter/planet_center = Vector3(180, 0, 0)
+shader_parameter/planet_radius = 18.0
+shader_parameter/grass_color = Color(0.35, 0.55, 0.28, 1)
+shader_parameter/dirt_color = Color(0.45, 0.38, 0.28, 1)
+shader_parameter/rock_color = Color(0.42, 0.42, 0.46, 1)
+shader_parameter/snow_color = Color(0.93, 0.95, 0.98, 1)
+shader_parameter/noise_scale = 18.0
+shader_parameter/rock_elevation_start = 1.2
+shader_parameter/rock_elevation_end = 2.8
+shader_parameter/pole_snow_start = 0.62
+shader_parameter/pole_snow_end = 0.9

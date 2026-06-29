@@ -19,7 +19,7 @@ class SpawnData:
 
 @export var planet: Node3D
 @export var speed: float = 5.0
-@export var run_speed: float = 8.0
+@export var run_speed: float = 8.0f
 @export var jump_velocity: float = 4.5
 @export var gravity_strength: float = 9.8
 @export var surface_align_speed: float = 10.0
@@ -369,11 +369,7 @@ func _set_terrain_focus(enabled: bool) -> void:
 	velocity = Vector3.ZERO
 	_want_jump = false
 	if _terrain_focus:
-		if OS.has_feature("web"):
-			# Browsers do not support confined-hidden mode; visible keeps get_mouse_position() accurate.
-			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		else:
-			Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
+		Input.set_mouse_mode(Input.MOUSE_MODE_CONFINED_HIDDEN)
 	else:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 

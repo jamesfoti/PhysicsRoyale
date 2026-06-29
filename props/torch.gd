@@ -26,7 +26,6 @@ func _ready() -> void:
 	_hide_legacy_flame_cone()
 	_snap_flame_anchor()
 	_configure_light()
-	_apply_web_particle_budget()
 	set_lit(false)
 
 
@@ -88,13 +87,6 @@ func _snap_flame_anchor() -> void:
 		return
 	# Sit flame effects just above the metal cup.
 	_flame_anchor.position = head.position + Vector3(0.0, 0.1, 0.0)
-
-
-func _apply_web_particle_budget() -> void:
-	if not OS.has_feature("web"):
-		return
-	_flame_particles.amount = 28
-	_ember_particles.amount = 12
 
 
 func _billboard_flame_glow() -> void:

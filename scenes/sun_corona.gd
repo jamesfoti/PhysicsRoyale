@@ -40,7 +40,4 @@ func _apply_renderer_tweaks() -> void:
 	var mat: ShaderMaterial = material_override as ShaderMaterial
 	if mat == null:
 		return
-	if OS.has_feature("web"):
-		mat.render_priority = 1
-		return
 	mat.render_priority = 0

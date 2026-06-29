@@ -1,5 +1,5 @@
 extends Node3D
-## Star dome parented to the camera on web where custom sky shaders are unreliable.
+## Large star dome mesh scaled to follow the camera.
 
 
 const DOME_RADIUS: float = 800.0

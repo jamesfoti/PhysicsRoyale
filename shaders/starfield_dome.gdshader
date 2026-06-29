@@ -43,10 +43,10 @@ float stars_at(vec3 dir, float scale, float size, float seed) {
 }
 
 void vertex() {
-	vec4 clip_pos: vec4 = PROJECTION_MATRIX * (VIEW * MODEL_MATRIX * vec4(VERTEX, 1.0));
+	vec4 clip_pos = PROJECTION_MATRIX * (VIEW_MATRIX * MODEL_MATRIX * vec4(VERTEX, 1.0));
 	POSITION = clip_pos.xyww;
-	vec3 world_pos: vec3 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec3 origin: vec3 = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec3 origin = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 	v_dir = normalize(world_pos - origin);
 }
 
